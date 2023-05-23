@@ -24,8 +24,8 @@ use std::{
 ///         x.push(segment.as_slice());  // capacity unchanged
 ///     }
 /// }
-/// x.iter_mut().map(|segment| segment.reverse()); // iterate by chunks
-/// assert_eq!(&x[0], segment.reverse().as_slice());
+/// x.iter_mut().for_each(|chunk| chunk.reverse()); // iterate by chunks
+/// assert_eq!(x[0], (0..1024).into_iter().rev().collect::<Vec<_>>());
 /// ```
 pub struct VecVec<T>
 where
