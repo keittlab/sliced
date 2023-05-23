@@ -13,7 +13,7 @@ use std::{
 /// 
 /// ```
 /// use vecvec::VecVec;
-/// let mut x: VecVec<usize> = VecVec::with_capacity(1024, 1024);  // allocate 4MB
+/// let mut x: VecVec<usize> = VecVec::with_capacity(1024, 1024);  // allocate 8MB
 /// let segment = (0..1024).into_iter().collect::<Vec<_>>();
 /// for _ in 0..1024 { x.push(segment.as_slice()) } // no allocation
 /// for _ in 0..1024 {
