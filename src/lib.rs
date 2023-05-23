@@ -6,6 +6,25 @@ use std::{
     slice::{Chunks, ChunksMut, Iter, IterMut},
 };
 
+/// A segmented vector for iterating over slices of constant length. The main purpose is to support
+/// repeated insertion and removal without repeated drop and allocate cycles for the contained sequences.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use vecvec::VecVec;
+/// let mut x: VecVec<usize> = VecVec::with_capacity(1024, 1024);  // allocate 4MB
+/// let segment = (0..1024).into_iter().collect::<Vec<_>>();
+/// for _ in 0..1024 { x.push(segment.as_slice()) } // no allocation
+/// for _ in 0..1024 {
+///     for i in (0..512).into_iter().step_by(2) {
+///         x.swap_truncate(i);  // capacity unchanged
+///     }
+///     for _ in 0..512 {
+///         x.push(segment.as_slice());  // capacity unchanged
+///     }
+/// }
+/// ```
 pub struct VecVec<T>
 where
     T: Copy + Clone,
@@ -170,7 +189,7 @@ macro_rules! vecvec {
             )*
             temp_vec
         }
-    };
+    }
 }
 
 #[cfg(test)]
