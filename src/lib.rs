@@ -11,21 +11,35 @@ use std::{
 /// 
 /// # Examples
 /// 
+/// This code is roughly twice as fast as the equivalent `Vec<Vec<T>>` version. Profiling
+/// shows that most of the extra time is spent in free-alloc cycles. See benches.rs. 
+/// 
 /// ```
+/// use rand::{rngs::SmallRng, Rng, SeedableRng};
 /// use vecvec::VecVec;
-/// let mut x: VecVec<usize> = VecVec::with_capacity(1024, 1024);  // allocate 8MB
-/// let segment = (0..1024).into_iter().collect::<Vec<_>>();
-/// for _ in 0..1024 { x.push(segment.as_slice()) } // no allocation
-/// for _ in 0..1024 {
-///     for i in (0..512).into_iter().step_by(2) {
-///         x.swap_truncate(i);  // capacity unchanged
+/// let mut rng = SmallRng::from_entropy();
+/// let mut x: VecVec<usize> = VecVec::with_capacity(1024, 20);
+/// for _ in 0..100 {
+///     x.push(
+///         std::iter::repeat_with(|| rng.gen())
+///             .take(20)
+///             .collect::<Vec<usize>>()
+///             .as_slice(),
+///     )
+/// }
+/// for _ in 0..100 {
+///     for i in (0..50).step_by(2) {
+///         x.swap_truncate(i);
 ///     }
-///     for _ in 0..512 {
-///         x.push(segment.as_slice());  // capacity unchanged
+///     for _ in 0..50 {
+///         x.push(
+///             std::iter::repeat_with(|| rng.gen())
+///                 .take(20)
+///                 .collect::<Vec<usize>>()
+///                 .as_slice(),
+///         )
 ///     }
 /// }
-/// x.iter_mut().for_each(|chunk| chunk.reverse()); // iterate by chunks
-/// assert_eq!(x[0], (0..1024).into_iter().rev().collect::<Vec<_>>());
 /// ```
 pub struct VecVec<T>
 where
