@@ -19,7 +19,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     c.bench_function("vecvec", |b| {
         b.iter(|| {
-            for _ in 0..1024 {
+            for _ in 0..512 {
                 for i in (0..512).step_by(2) {
                     x1.swap_truncate(i);
                 }
@@ -31,7 +31,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     c.bench_function("vec", |b| {
         b.iter(|| {
-            for _ in 0..1024 {
+            for _ in 0..512 {
                 for i in (0..512).step_by(2) {
                     x2.swap_remove(i);
                 }
