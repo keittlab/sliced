@@ -7,39 +7,30 @@ use std::{
 };
 
 /// A segmented vector for iterating over slices of constant length.
-/// 
+///
 /// The main purpose is to support repeated insertion and removal without
 /// triggering drop and allocate cycles for the contained sequences.
-/// 
+///
 /// # Example
-/// 
+///
 /// This code is roughly twice as fast as the equivalent `Vec<Vec<T>>` version. Profiling
-/// shows that most of the extra time is spent in free-alloc cycles. See benches.rs. 
-/// 
+/// shows that most of the extra time is spent in free-alloc cycles. See benches.rs.
+///
 /// ```
 /// use rand::{rngs::SmallRng, Rng, SeedableRng};
 /// use vecvec::VecVec;
 /// let mut rng = SmallRng::from_entropy();
 /// let mut x: VecVec<usize> = VecVec::with_capacity(100, 20);
+/// let mut gen_vec = || std::iter::repeat_with(|| rng.gen()).take(20).collect::<Vec<usize>>();
 /// for _ in 0..100 {
-///     x.push(
-///         std::iter::repeat_with(|| rng.gen())
-///             .take(20)
-///             .collect::<Vec<usize>>()
-///             .as_slice(),
-///     )
+///     x.push(gen_vec().as_slice())
 /// }
 /// for _ in 0..100 {
 ///     for i in (0..50).step_by(2) {
 ///         x.swap_truncate(i);
 ///     }
 ///     for _ in 0..50 {
-///         x.push(
-///             std::iter::repeat_with(|| rng.gen())
-///                 .take(20)
-///                 .collect::<Vec<usize>>()
-///                 .as_slice(),
-///         )
+///         x.push(gen_vec().as_slice())
 ///     }
 /// }
 /// ```
@@ -57,7 +48,7 @@ where
     T: Copy + Clone,
 {
     /// Initialize a `VecVec` and set the segment size.
-    /// 
+    ///
     /// Panics if `segment_len` is zero.
     pub fn new(segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
@@ -89,11 +80,11 @@ where
         self.storage.capacity()
     }
     /// Append the contents of another `VecVec`.
-    /// 
+    ///
     /// `other` is drained after call.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```
     /// use vecvec::{vecvec, VecVec};
     /// let mut a = vecvec![[1, 2, 3], [4, 5, 6]];
@@ -102,7 +93,7 @@ where
     /// assert_eq!(a.len(), 4);
     /// assert_eq!(b.len(), 0);
     /// ```
-    /// 
+    ///
     ///  Panics if the segment size of `other` is different.
     pub fn append(&mut self, other: &mut Self) {
         assert_eq!(other.segment_len, self.segment_len);
@@ -229,15 +220,15 @@ where
 }
 
 /// Contruct a `VecVec` from a list of arrays
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// use vecvec::{vecvec, VecVec};
 /// let x = vecvec![[1, 2, 3], [4, 5, 6]];
 /// assert_eq!(x.len(), 2);
 /// ```
-/// 
+///
 /// Panics if array lengths do not match.
 #[macro_export]
 macro_rules! vecvec {

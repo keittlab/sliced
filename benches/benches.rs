@@ -3,54 +3,40 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use vecvec::VecVec;
 
 fn criterion_benchmark(c: &mut Criterion) {
+    let mut rng = SmallRng::from_entropy();
+    let mut gen_vec = || {
+        std::iter::repeat_with(|| rng.gen())
+            .take(20)
+            .collect::<Vec<usize>>()
+    };
+    let mut x1: VecVec<usize> = VecVec::with_capacity(1024, 20);
+    for _ in 0..1024 {
+        x1.push(gen_vec().as_slice())
+    }
+    let mut x2: Vec<Vec<usize>> = Vec::with_capacity(1024);
+    for _ in 0..1024 {
+        x2.push(gen_vec())
+    }
     c.bench_function("vecvec", |b| {
         b.iter(|| {
-            let mut rng = SmallRng::from_entropy();
-            let mut x: VecVec<usize> = VecVec::with_capacity(1024, 20);
-            for _ in 0..1024 {
-                x.push(
-                    std::iter::repeat_with(|| rng.gen())
-                        .take(20)
-                        .collect::<Vec<usize>>()
-                        .as_slice(),
-                )
-            }
             for _ in 0..1024 {
                 for i in (0..512).step_by(2) {
-                    x.swap_truncate(i);
+                    x1.swap_truncate(i);
                 }
                 for _ in 0..512 {
-                    x.push(
-                        std::iter::repeat_with(|| rng.gen())
-                            .take(20)
-                            .collect::<Vec<usize>>()
-                            .as_slice(),
-                    )
+                    x1.push(gen_vec().as_slice())
                 }
             }
         })
     });
     c.bench_function("vec", |b| {
         b.iter(|| {
-            let mut rng = SmallRng::from_entropy();
-            let mut x: Vec<Vec<usize>> = Vec::with_capacity(1024); // allocate 8MB
-            for _ in 0..1024 {
-                x.push(
-                    std::iter::repeat_with(|| rng.gen())
-                        .take(20)
-                        .collect::<Vec<usize>>()
-                )
-            }
             for _ in 0..1024 {
                 for i in (0..512).step_by(2) {
-                    x.swap_remove(i);
+                    x2.swap_remove(i);
                 }
                 for _ in 0..512 {
-                    x.push(
-                        std::iter::repeat_with(|| rng.gen())
-                            .take(20)
-                            .collect::<Vec<usize>>()
-                    )
+                    x2.push(gen_vec())
                 }
             }
         })
