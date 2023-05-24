@@ -6,10 +6,12 @@ use std::{
     slice::{Chunks, ChunksMut, Iter, IterMut},
 };
 
-/// A segmented vector for iterating over slices of constant length. The main purpose is to support
-/// repeated insertion and removal without repeated drop and allocate cycles for the contained sequences.
+/// A segmented vector for iterating over slices of constant length.
 /// 
-/// # Examples
+/// The main purpose is to support repeated insertion and removal without
+/// triggering drop and allocate cycles for the contained sequences.
+/// 
+/// # Example
 /// 
 /// This code is roughly twice as fast as the equivalent `Vec<Vec<T>>` version. Profiling
 /// shows that most of the extra time is spent in free-alloc cycles. See benches.rs. 
@@ -18,7 +20,7 @@ use std::{
 /// use rand::{rngs::SmallRng, Rng, SeedableRng};
 /// use vecvec::VecVec;
 /// let mut rng = SmallRng::from_entropy();
-/// let mut x: VecVec<usize> = VecVec::with_capacity(1024, 20);
+/// let mut x: VecVec<usize> = VecVec::with_capacity(100, 20);
 /// for _ in 0..100 {
 ///     x.push(
 ///         std::iter::repeat_with(|| rng.gen())
@@ -41,6 +43,7 @@ use std::{
 ///     }
 /// }
 /// ```
+#[derive(Debug)]
 pub struct VecVec<T>
 where
     T: Copy + Clone,
@@ -53,6 +56,9 @@ impl<T> VecVec<T>
 where
     T: Copy + Clone,
 {
+    /// Initialize a `VecVec` and set the segment size.
+    /// 
+    /// Panics if `segment_len` is zero.
     pub fn new(segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -60,6 +66,9 @@ where
             segment_len,
         }
     }
+    /// Initialize a `VecVec` and set the capacity and segment size.
+    ///
+    /// Panics if `segment_len` is zero.
     pub fn with_capacity(size: usize, segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -67,15 +76,40 @@ where
             segment_len,
         }
     }
+    /// Returns the number of internal segments
     pub fn len(&self) -> usize {
         self.storage.len() / self.segment_len
     }
+    /// Get the capacity in number of segments
+    pub fn capacity(&self) -> usize {
+        self.storage_capacity() / self.segment_len
+    }
+    /// Get the capacity of the underlying storage
+    pub fn storage_capacity(&self) -> usize {
+        self.storage.capacity()
+    }
+    /// Append the contents of another `VecVec`.
+    /// 
+    /// `other` is drained after call.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use vecvec::{vecvec, VecVec};
+    /// let mut a = vecvec![[1, 2, 3], [4, 5, 6]];
+    /// let mut b = vecvec![[7, 8, 9], [3, 2, 1]];
+    /// a.append(&mut b);
+    /// assert_eq!(a.len(), 4);
+    /// assert_eq!(b.len(), 0);
+    /// ```
+    /// 
+    ///  Panics if the segment size of `other` is different.
     pub fn append(&mut self, other: &mut Self) {
         assert_eq!(other.segment_len, self.segment_len);
         self.storage.append(&mut other.storage)
     }
     pub fn insert(&mut self, index: usize, segment: &[T]) {
-        debug_assert!(index < self.len());
+        assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
         let orig_last_index = self.last_index();
         self.storage.extend_from_within(self.storage_range_last());
@@ -194,14 +228,25 @@ where
     }
 }
 
+/// Contruct a `VecVec` from a list of arrays
+/// 
+/// # Example
+/// 
+/// ```
+/// use vecvec::{vecvec, VecVec};
+/// let x = vecvec![[1, 2, 3], [4, 5, 6]];
+/// assert_eq!(x.len(), 2);
+/// ```
+/// 
+/// Panics if array lengths do not match.
 #[macro_export]
 macro_rules! vecvec {
     ( $first:expr$(, $the_rest:expr )*$(,)? ) => {
         {
             let mut temp_vec = VecVec::new($first.len());
-            temp_vec.push($first);
+            temp_vec.push($first.as_slice());
             $(
-                temp_vec.push($the_rest);
+                temp_vec.push($the_rest.as_slice());
             )*
             temp_vec
         }
@@ -214,7 +259,7 @@ mod tests {
 
     #[test]
     fn test_vecvec() {
-        let mut a = vecvec!(&[1, 2, 3], &[4, 5, 6], &[7, 8, 9]);
+        let mut a = vecvec!([1, 2, 3], [4, 5, 6], [7, 8, 9]);
         assert_eq!(&a[0], &[1, 2, 3]);
         assert_eq!(&a[1], &[4, 5, 6]);
         assert_eq!(&a[2], &[7, 8, 9]);
