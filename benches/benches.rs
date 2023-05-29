@@ -27,9 +27,9 @@ fn criterion_benchmark(c: &mut Criterion) {
             for i in 0..500 {
                 x1.swap_truncate(i);
             }
-            for i in 0..500 {
-                x1.push(&x1_insert[i]);
-            }
+            x1_insert
+                .iter()
+                .for_each(|segment| x1.push(segment));
         })
     });
     c.bench_function("vec", |b| {
@@ -37,9 +37,9 @@ fn criterion_benchmark(c: &mut Criterion) {
             for i in 0..500 {
                 x2.swap_remove(i);
             }
-            for i in 0..500 {
-                x2.push(x2_insert[i].clone());
-            }
+            x2_insert
+                .iter()
+                .for_each(|segment| x2.push(segment.clone()));
         })
     });
 }
