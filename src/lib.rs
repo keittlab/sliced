@@ -1,24 +1,24 @@
 #![allow(dead_code)]
 //! Storing vectors within vectors is convenient but means that each
-//! stored vector will allocate on the heap and drop when removed. VecVec
+//! stored vector will allocate on the heap and drop when removed. SlicedVec
 //! stores constant-length segments within a single vector so that `push`
 //! within the storage capacity will not allocate and `truncate` will not
 //! deallocate from the heap. Benchmarks indicate that this strategy is not
 //! always faster for repeated cycles of `push` and `swap_remove`. This is
 //! likely because the overhead of swapping a larger number of elements. `Vec`
 //! within `Vec` only has to swap the pointers of the stored `Vec` objects
-//! whereas `VecVec` has to swap an entire segment of values. In a few cases,
-//! `VecVec` has proven about twice as fast, but you will need to test your
-//! cases. `VecVec` is nonetheless convenient for organizing segmented storage,
+//! whereas `SlicedVec` has to swap an entire segment of values. In a few cases,
+//! `SlicedVec` has proven about twice as fast, but you will need to test your
+//! cases. `SlicedVec` is nonetheless convenient for organizing segmented storage,
 //! such as a collection of image rows, and so on.
 //!
 //! # Example
 //!
 //! ```
 //! use rand::{rngs::SmallRng, Rng, SeedableRng};
-//! use vecvec::VecVec;
+//! use slicedvec::SlicedVec;
 //! let mut rng = SmallRng::from_entropy();
-//! let mut x1 = VecVec::with_capacity(1000, 20);
+//! let mut x1 = SlicedVec::with_capacity(1000, 20);
 //! x1.push_vec(
 //!     std::iter::repeat_with(|| rng.gen())
 //!     .take(20 * 1000)
@@ -40,7 +40,7 @@ use std::{
 
 /// A segmented vector for iterating over slices of constant length.
 #[derive(Debug)]
-pub struct VecVec<T>
+pub struct SlicedVec<T>
 where
     T: Copy + Clone,
 {
@@ -48,11 +48,11 @@ where
     segment_len: usize,
 }
 
-impl<T> VecVec<T>
+impl<T> SlicedVec<T>
 where
     T: Copy + Clone,
 {
-    /// Initialize a `VecVec` and set the segment size.
+    /// Initialize a `SlicedVec` and set the segment size.
     ///
     /// Panics if `segment_len` is zero.
     pub fn new(segment_len: usize) -> Self {
@@ -62,7 +62,7 @@ where
             segment_len,
         }
     }
-    /// Initialize a `VecVec` and set the capacity and segment size.
+    /// Initialize a `SlicedVec` and set the capacity and segment size.
     ///
     /// Panics if `segment_len` is zero.
     pub fn with_capacity(size: usize, segment_len: usize) -> Self {
@@ -88,7 +88,7 @@ where
     pub fn storage_capacity(&self) -> usize {
         self.storage.capacity()
     }
-    /// Append the contents of another `VecVec`.
+    /// Append the contents of another `SlicedVec`.
     ///
     /// Complexity is the length of `other`, plus any
     /// allocation required. `other` is drained after call.
@@ -96,9 +96,9 @@ where
     /// # Example
     ///
     /// ```
-    /// use vecvec::{vecvec, VecVec};
-    /// let mut a = vecvec![[1, 2, 3], [4, 5, 6]];
-    /// let mut b = vecvec![[7, 8, 9], [3, 2, 1]];
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let mut a = slicedvec![[1, 2, 3], [4, 5, 6]];
+    /// let mut b = slicedvec![[7, 8, 9], [3, 2, 1]];
     /// a.append(&mut b);
     /// assert_eq!(a.len(), 4);
     /// assert_eq!(b.len(), 0);
@@ -115,7 +115,7 @@ where
     ///
     /// Panics if `index` is out of bounds or if the
     /// length of `segment` is not the native segment
-    /// size of the `VecVec`.
+    /// size of the `SlicedVec`.
     pub fn insert(&mut self, index: usize, segment: &[T]) {
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
@@ -138,8 +138,8 @@ where
     /// # Example
     ///
     /// ```
-    /// use vecvec::*;
-    /// let mut a = vecvec![[1, 2, 3]];
+    /// use slicedvec::*;
+    /// let mut a = slicedvec![[1, 2, 3]];
     /// a.push(&[4, 5, 6, 7, 8, 9]); // any multiple of segment length
     /// assert_eq!(a.len(), 3);
     /// assert_eq!(a.storage_len(), 9);
@@ -193,7 +193,7 @@ where
     /// Swap a segment and truncate its storage.
     ///
     /// Does not preserve the order of segments. The
-    /// `VecVec` length will be reduced by one segment.
+    /// `SlicedVec` length will be reduced by one segment.
     /// Complexity is the segment length.
     ///
     /// Panics if `index` is out of bounds.
@@ -283,7 +283,7 @@ where
     }
 }
 
-impl<T> Index<usize> for VecVec<T>
+impl<T> Index<usize> for SlicedVec<T>
 where
     T: Copy + Clone,
 {
@@ -293,7 +293,7 @@ where
     }
 }
 
-impl<T> IndexMut<usize> for VecVec<T>
+impl<T> IndexMut<usize> for SlicedVec<T>
 where
     T: Copy + Clone,
 {
@@ -303,22 +303,22 @@ where
     }
 }
 
-/// Contruct a `VecVec` from a list of arrays
+/// Contruct a `SlicedVec` from a list of arrays
 ///
 /// # Example
 ///
 /// ```
-/// use vecvec::{vecvec, VecVec};
-/// let x = vecvec![[1, 2, 3], [4, 5, 6]];
+/// use slicedvec::{slicedvec, SlicedVec};
+/// let x = slicedvec![[1, 2, 3], [4, 5, 6]];
 /// assert_eq!(x.len(), 2);
 /// ```
 ///
 /// Panics if array lengths do not match.
 #[macro_export]
-macro_rules! vecvec {
+macro_rules! slicedvec {
     ( $first:expr$(, $the_rest:expr )*$(,)? ) => {
         {
-            let mut temp_vec = VecVec::new($first.len());
+            let mut temp_vec = SlicedVec::new($first.len());
             temp_vec.push($first.as_slice());
             $(
                 temp_vec.push($the_rest.as_slice());
@@ -330,11 +330,11 @@ macro_rules! vecvec {
 
 #[cfg(test)]
 mod tests {
-    use super::VecVec;
+    use super::SlicedVec;
 
     #[test]
-    fn test_vecvec() {
-        let mut a = vecvec!([1, 2, 3], [4, 5, 6], [7, 8, 9]);
+    fn test_slicedvec() {
+        let mut a = slicedvec!([1, 2, 3], [4, 5, 6], [7, 8, 9]);
         assert!(a.is_valid_length(&[1, 2, 3, 4, 5, 6]));
         assert_eq!(&a[0], &[1, 2, 3]);
         assert_eq!(&a[1], &[4, 5, 6]);
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(a.swap_remove(1), &[4, 5, 6]);
         assert_eq!(a.len(), 2);
         assert_eq!(&a[1], &[7, 8, 9]);
-        a.append(&mut vecvec!(&[3, 6, 9]));
+        a.append(&mut slicedvec!(&[3, 6, 9]));
         assert_eq!(&a[2], &[3, 6, 9]);
         a.insert(1, &[3, 2, 1]);
         assert_eq!(&a[3], &[3, 6, 9]);
@@ -350,7 +350,7 @@ mod tests {
         a.swap_insert(1, &[2, 2, 2]);
         assert_eq!(&a[4], &[3, 2, 1]);
         assert_eq!(&a[1], &[2, 2, 2]);
-        let mut v: VecVec<i32> = VecVec::new(3);
+        let mut v: SlicedVec<i32> = SlicedVec::new(3);
         assert_eq!(v.len(), 0);
         v.push(&[1, 2, 3]);
         assert_eq!(v.len(), 1);
@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(v.get(0).unwrap(), &[4, 5, 6]);
         v.iter_mut().for_each(|x| x.clone_from_slice(&[7, 8, 9]));
         assert_eq!(v.get(0).unwrap(), &[7, 8, 9]);
-        let mut w: VecVec<i32> = VecVec::with_capacity(20, 5);
+        let mut w: SlicedVec<i32> = SlicedVec::with_capacity(20, 5);
         w.push(&[1, 2, 3, 4, 5]);
         let x = w.get_mut(0).unwrap();
         assert_eq!(x, &[1, 2, 3, 4, 5]);
