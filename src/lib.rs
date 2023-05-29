@@ -8,13 +8,20 @@ use std::{
 
 /// A segmented vector for iterating over slices of constant length.
 ///
-/// The main purpose is to support repeated insertion and removal without
-/// triggering drop and allocate cycles for the contained sequences.
+/// Storing vectors within vectors is convenient but means that each
+/// stored vector will allocate on the heap and drop when removed. VecVec
+/// stores constant-length segments within a single vector so that `push`
+/// within the storage capacity will not allocate and `truncate` will not
+/// deallocate from the heap. Benchmarks indicate that this strategy is not
+/// always faster for repeated cycles of `push` and `swap_remove`. This is
+/// likely because the overhead of swapping a larger number of elements. `Vec`
+/// within `Vec` only has to swap the pointers of the stored `Vec` objects
+/// whereas `VecVec` has to swap an entire segment of values. In a few cases,
+/// `VecVec` has proven about twice as fast, but you will need to test your
+/// cases. `VecVec` is nonetheless convenient for organizing segmented storage,
+/// such as a collection of image rows, and so on.
 ///
 /// # Example
-///
-/// This code is roughly twice as fast as the equivalent `Vec<Vec<T>>` version. Profiling
-/// shows that most of the extra time is spent in free-alloc cycles. See benches.rs.
 ///
 /// ```
 /// use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -75,13 +82,18 @@ where
     pub fn capacity(&self) -> usize {
         self.storage_capacity() / self.segment_len
     }
+    /// Returns the length of the underlying storage
+    pub fn storage_len(&self) -> usize {
+        self.storage.len()
+    }
     /// Get the capacity of the underlying storage
     pub fn storage_capacity(&self) -> usize {
         self.storage.capacity()
     }
     /// Append the contents of another `VecVec`.
     ///
-    /// `other` is drained after call.
+    /// Complexity is the length of `other`, plus any
+    /// allocation required. `other` is drained after call.
     ///
     /// # Example
     ///
@@ -99,6 +111,13 @@ where
         assert_eq!(other.segment_len, self.segment_len);
         self.storage.append(&mut other.storage)
     }
+    /// Insert a slice at position `index`.
+    /// 
+    /// Complexity is linear in `storage_len`.
+    /// 
+    /// Panics if `index` is out of bounds or if the
+    /// length of `segment` is not the native segment
+    /// size of the `VecVec`.
     pub fn insert(&mut self, index: usize, segment: &[T]) {
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
@@ -111,17 +130,56 @@ where
         }
         unsafe { self.overwrite(index, segment) }
     }
+    /// Add one or more segments to the end.
+    /// 
+    /// Complexity is amortized the segment size.
+    /// 
+    /// Panics if the length of the slice is not
+    /// a multiple of the segment length.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use vecvec::*;
+    /// let mut a = vecvec![[1, 2, 3]];
+    /// a.push(&[4, 5, 6, 7, 8, 9]); // any multiple of segment length
+    /// assert_eq!(a.len(), 3);
+    /// assert_eq!(a.storage_len(), 9);
+    /// ```
+    /// 
     pub fn push(&mut self, segment: &[T]) {
-        assert_eq!(segment.len(), self.segment_len);
+        assert!(self.is_valid_length(segment));
         self.storage.extend_from_slice(segment)
     }
+    /// Add one or more segments contained in a `Vec`.
+    /// 
+    /// Complexity is amortized the length of
+    /// the slice.
+    /// 
+    /// Panics if the length of the slice is not
+    /// a multiple of the segment length.
+    pub fn push_vec(&mut self, segment: &Vec<T>) {
+        self.push(segment.as_slice())
+    }
+    /// Get a reference to a segment.
+    /// 
+    /// Returns `None` if `index` is out of range.
     pub fn get(&self, index: usize) -> Option<&[T]> {
         self.storage.get(self.storage_range(index))
     }
+    /// Get a mutable reference to a segment.
+    /// 
+    /// Returns `None` if `index` is out of range.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut [T]> {
         let range = self.storage_range(index);
         self.storage.get_mut(range)
     }
+    /// Remove and return a segment.
+    /// 
+    /// Does not preserve the order of segments.
+    /// Complexity is the segment length.
+    /// 
+    /// Panics if index is out of range.
     pub fn swap_remove(&mut self, index: usize) -> Vec<T> {
         debug_assert!(index < self.len());
         if index != self.last_index() {
@@ -134,6 +192,13 @@ where
             .as_slice()
             .into()
     }
+    /// Swap a segment and truncate its storage.
+    /// 
+    /// Does not preserve the order of segments. The
+    /// `VecVec` length will be reduced by one segment.
+    /// Complexity is the segment length.
+    /// 
+    /// Panics if `index` is out of bounds.
     pub fn swap_truncate(&mut self, index: usize) {
         debug_assert!(index < self.len());
         if index != self.last_index() {
@@ -143,27 +208,45 @@ where
         }
         self.storage.truncate(self.storage.len() - self.segment_len)
     }
+    /// Non-order-preserving insert.
+    /// 
+    /// Appends the contents of the segment at `index`
+    /// to the end of the storage and then overwrites
+    /// the segment with the new values. Complexity is
+    /// the twice the segment length.
+    /// 
+    /// Panics if `index` is out of bounds.
     pub fn swap_insert(&mut self, index: usize, segment: &[T]) {
         debug_assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
         self.storage.extend_from_within(self.storage_range(index));
         unsafe { self.overwrite(index, segment) }
     }
+    /// Return a chunked iterator.
+    /// 
+    /// Allows iteration over segments as slices.
     pub fn iter(&self) -> Chunks<'_, T> {
         self.storage.chunks(self.segment_len)
     }
+    /// Return a mutable chunked iterator.
+    /// 
+    /// Allows iteration and modification of segments.
     pub fn iter_mut(&mut self) -> ChunksMut<'_, T> {
         self.storage.chunks_mut(self.segment_len)
     }
+    /// Iterate over the raw storage.
     pub fn iter_storage(&self) -> Iter<'_, T> {
         self.storage.iter()
     }
+    /// Mutable iteration over the raw storage.
     pub fn iter_mut_storage(&mut self) -> IterMut<'_, T> {
         self.storage.iter_mut()
     }
+    /// Clear the contents.
     pub fn clear(&mut self) {
         self.storage.clear()
     }
+    /// Test if storage length is zero.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -196,6 +279,9 @@ where
             self.storage.as_mut_ptr().add(self.storage_begin(index)),
             self.segment_len,
         )
+    }
+    fn is_valid_length(&self, data: &[T]) -> bool {
+        data.len() % self.segment_len == 0
     }
 }
 
@@ -251,6 +337,7 @@ mod tests {
     #[test]
     fn test_vecvec() {
         let mut a = vecvec!([1, 2, 3], [4, 5, 6], [7, 8, 9]);
+        assert!(a.is_valid_length(&[1, 2, 3, 4, 5, 6]));
         assert_eq!(&a[0], &[1, 2, 3]);
         assert_eq!(&a[1], &[4, 5, 6]);
         assert_eq!(&a[2], &[7, 8, 9]);
