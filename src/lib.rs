@@ -1,4 +1,36 @@
 #![allow(dead_code)]
+//! Storing vectors within vectors is convenient but means that each
+//! stored vector will allocate on the heap and drop when removed. VecVec
+//! stores constant-length segments within a single vector so that `push`
+//! within the storage capacity will not allocate and `truncate` will not
+//! deallocate from the heap. Benchmarks indicate that this strategy is not
+//! always faster for repeated cycles of `push` and `swap_remove`. This is
+//! likely because the overhead of swapping a larger number of elements. `Vec`
+//! within `Vec` only has to swap the pointers of the stored `Vec` objects
+//! whereas `VecVec` has to swap an entire segment of values. In a few cases,
+//! `VecVec` has proven about twice as fast, but you will need to test your
+//! cases. `VecVec` is nonetheless convenient for organizing segmented storage,
+//! such as a collection of image rows, and so on.
+//!
+//! # Example
+//!
+//! ```
+//! use rand::{rngs::SmallRng, Rng, SeedableRng};
+//! use vecvec::VecVec;
+//! let mut rng = SmallRng::from_entropy();
+//! let mut x1 = VecVec::with_capacity(1000, 20);
+//! x1.push_vec(
+//!     std::iter::repeat_with(|| rng.gen())
+//!     .take(20 * 1000)
+//!     .collect::<Vec<_>>(),
+//! );
+//! let x1_insert: Vec<Vec<usize>> =
+//!     std::iter::repeat_with(|| std::iter::repeat_with(|| rng.gen()).take(20).collect())
+//!         .take(500)
+//!         .collect();
+//! for i in 0..500 { x1.swap_truncate(i) }
+//! for i in 0..500 { x1.push(&x1_insert[i]) }
+//! ```
 
 use std::{
     ops::{Index, IndexMut, Range},
@@ -7,40 +39,6 @@ use std::{
 };
 
 /// A segmented vector for iterating over slices of constant length.
-///
-/// Storing vectors within vectors is convenient but means that each
-/// stored vector will allocate on the heap and drop when removed. VecVec
-/// stores constant-length segments within a single vector so that `push`
-/// within the storage capacity will not allocate and `truncate` will not
-/// deallocate from the heap. Benchmarks indicate that this strategy is not
-/// always faster for repeated cycles of `push` and `swap_remove`. This is
-/// likely because the overhead of swapping a larger number of elements. `Vec`
-/// within `Vec` only has to swap the pointers of the stored `Vec` objects
-/// whereas `VecVec` has to swap an entire segment of values. In a few cases,
-/// `VecVec` has proven about twice as fast, but you will need to test your
-/// cases. `VecVec` is nonetheless convenient for organizing segmented storage,
-/// such as a collection of image rows, and so on.
-///
-/// # Example
-///
-/// ```
-/// use rand::{rngs::SmallRng, Rng, SeedableRng};
-/// use vecvec::VecVec;
-/// let mut rng = SmallRng::from_entropy();
-/// let mut x: VecVec<usize> = VecVec::with_capacity(100, 20);
-/// let mut gen_vec = || std::iter::repeat_with(|| rng.gen()).take(20).collect::<Vec<usize>>();
-/// for _ in 0..100 {
-///     x.push(gen_vec().as_slice())
-/// }
-/// for _ in 0..100 {
-///     for i in (0..50).step_by(2) {
-///         x.swap_truncate(i);
-///     }
-///     for _ in 0..50 {
-///         x.push(gen_vec().as_slice())
-///     }
-/// }
-/// ```
 #[derive(Debug)]
 pub struct VecVec<T>
 where
@@ -112,9 +110,9 @@ where
         self.storage.append(&mut other.storage)
     }
     /// Insert a slice at position `index`.
-    /// 
+    ///
     /// Complexity is linear in `storage_len`.
-    /// 
+    ///
     /// Panics if `index` is out of bounds or if the
     /// length of `segment` is not the native segment
     /// size of the `VecVec`.
@@ -131,14 +129,14 @@ where
         unsafe { self.overwrite(index, segment) }
     }
     /// Add one or more segments to the end.
-    /// 
+    ///
     /// Complexity is amortized the segment size.
-    /// 
+    ///
     /// Panics if the length of the slice is not
     /// a multiple of the segment length.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```
     /// use vecvec::*;
     /// let mut a = vecvec![[1, 2, 3]];
@@ -146,39 +144,39 @@ where
     /// assert_eq!(a.len(), 3);
     /// assert_eq!(a.storage_len(), 9);
     /// ```
-    /// 
+    ///
     pub fn push(&mut self, segment: &[T]) {
         assert!(self.is_valid_length(segment));
         self.storage.extend_from_slice(segment)
     }
     /// Add one or more segments contained in a `Vec`.
-    /// 
+    ///
     /// Complexity is amortized the length of
     /// the slice.
-    /// 
+    ///
     /// Panics if the length of the slice is not
     /// a multiple of the segment length.
-    pub fn push_vec(&mut self, segment: &Vec<T>) {
+    pub fn push_vec(&mut self, segment: Vec<T>) {
         self.push(segment.as_slice())
     }
     /// Get a reference to a segment.
-    /// 
+    ///
     /// Returns `None` if `index` is out of range.
     pub fn get(&self, index: usize) -> Option<&[T]> {
         self.storage.get(self.storage_range(index))
     }
     /// Get a mutable reference to a segment.
-    /// 
+    ///
     /// Returns `None` if `index` is out of range.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut [T]> {
         let range = self.storage_range(index);
         self.storage.get_mut(range)
     }
     /// Remove and return a segment.
-    /// 
+    ///
     /// Does not preserve the order of segments.
     /// Complexity is the segment length.
-    /// 
+    ///
     /// Panics if index is out of range.
     pub fn swap_remove(&mut self, index: usize) -> Vec<T> {
         debug_assert!(index < self.len());
@@ -193,11 +191,11 @@ where
             .into()
     }
     /// Swap a segment and truncate its storage.
-    /// 
+    ///
     /// Does not preserve the order of segments. The
     /// `VecVec` length will be reduced by one segment.
     /// Complexity is the segment length.
-    /// 
+    ///
     /// Panics if `index` is out of bounds.
     pub fn swap_truncate(&mut self, index: usize) {
         debug_assert!(index < self.len());
@@ -209,12 +207,12 @@ where
         self.storage.truncate(self.storage.len() - self.segment_len)
     }
     /// Non-order-preserving insert.
-    /// 
+    ///
     /// Appends the contents of the segment at `index`
     /// to the end of the storage and then overwrites
     /// the segment with the new values. Complexity is
     /// the twice the segment length.
-    /// 
+    ///
     /// Panics if `index` is out of bounds.
     pub fn swap_insert(&mut self, index: usize, segment: &[T]) {
         debug_assert!(index < self.len());
@@ -223,13 +221,13 @@ where
         unsafe { self.overwrite(index, segment) }
     }
     /// Return a chunked iterator.
-    /// 
+    ///
     /// Allows iteration over segments as slices.
     pub fn iter(&self) -> Chunks<'_, T> {
         self.storage.chunks(self.segment_len)
     }
     /// Return a mutable chunked iterator.
-    /// 
+    ///
     /// Allows iteration and modification of segments.
     pub fn iter_mut(&mut self) -> ChunksMut<'_, T> {
         self.storage.chunks_mut(self.segment_len)
@@ -281,7 +279,7 @@ where
         )
     }
     fn is_valid_length(&self, data: &[T]) -> bool {
-        data.len() % self.segment_len == 0
+        (!data.is_empty()) && data.len() % self.segment_len == 0
     }
 }
 
