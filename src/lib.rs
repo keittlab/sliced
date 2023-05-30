@@ -33,9 +33,10 @@
 //! ```
 
 use std::{
+    collections::BTreeSet,
     ops::{Index, IndexMut, Range},
     ptr,
-    slice::{Chunks, ChunksMut, Iter, IterMut},
+    slice::{Iter, IterMut},
 };
 
 /// A segmented vector for iterating over slices of constant length.
@@ -71,6 +72,10 @@ where
             storage: Vec::with_capacity(size * segment_len),
             segment_len,
         }
+    }
+    /// Get the internal segment length
+    pub fn segment_len(&self) -> usize {
+        self.segment_len
     }
     /// Returns the number of internal segments
     pub fn len(&self) -> usize {
@@ -223,14 +228,20 @@ where
     /// Return a chunked iterator.
     ///
     /// Allows iteration over segments as slices.
-    pub fn iter(&self) -> Chunks<'_, T> {
+    pub fn iter(&self) -> impl Iterator<Item = &[T]> {
         self.storage.chunks(self.segment_len)
     }
     /// Return a mutable chunked iterator.
     ///
     /// Allows iteration and modification of segments.
-    pub fn iter_mut(&mut self) -> ChunksMut<'_, T> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut [T]> {
         self.storage.chunks_mut(self.segment_len)
+    }
+    /// Return a chunked iterator.
+    ///
+    /// Allows iteration over segments as slices.
+    pub fn enumerate(&self) -> impl Iterator<Item = (usize, &[T])> {
+        self.storage.chunks(self.segment_len).enumerate()
     }
     /// Iterate over the raw storage.
     pub fn iter_storage(&self) -> Iter<'_, T> {
@@ -303,6 +314,16 @@ where
     }
 }
 
+#[allow(clippy::from_over_into)]
+impl<T> Into<Vec<T>> for SlicedVec<T>
+where
+    T: Copy + Clone,
+{
+    fn into(self) -> Vec<T> {
+        self.storage
+    }
+}
+
 /// Contruct a `SlicedVec` from a list of arrays
 ///
 /// # Example
@@ -328,6 +349,117 @@ macro_rules! slicedvec {
     }
 }
 
+/// A segmented slab with stable keys.
+///
+/// Maintains a `SlicedVec` and a `BTreeSet` of
+/// available slots. Given sufficient capacity, no
+/// allocation will occur on insert or removal. Look
+/// up of available slots is logarithmic in the number
+/// of open slots.
+#[derive(Debug)]
+pub struct SlicedSlab<T>
+where
+    T: Copy + Clone,
+{
+    storage: SlicedVec<T>,
+    open_slots: BTreeSet<usize>,
+}
+
+impl<T> SlicedSlab<T>
+where
+    T: Copy + Clone,
+{
+    /// Construct a new `SlicedSlab`.
+    ///
+    /// Panics if `segment_len` is zero.
+    pub fn new(segment_len: usize) -> Self {
+        assert_ne!(segment_len, 0);
+        Self {
+            storage: SlicedVec::new(segment_len),
+            open_slots: BTreeSet::new(),
+        }
+    }
+    /// Initialize a `SlicedSlab` and set the capacity and segment size.
+    ///
+    /// Panics if `segment_len` is zero.
+    pub fn with_capacity(size: usize, segment_len: usize) -> Self {
+        assert_ne!(segment_len, 0);
+        Self {
+            storage: SlicedVec::with_capacity(size, segment_len),
+            open_slots: BTreeSet::new(),
+        }
+    }
+    #[must_use]
+    /// Insert a segment into the slab.
+    ///
+    /// The first available slot is overwritten
+    /// with the contents of the slice. Otherwise,
+    /// the slice is appended to the storage. Returns
+    /// a key for later retreivel.
+    ///
+    /// Panics if the length of the slice does
+    /// not match the segments size of the slab.
+    pub fn insert(&mut self, segment: &[T]) -> usize {
+        assert_eq!(segment.len(), self.storage.segment_len());
+        match self.open_slots.pop_first() {
+            Some(key) => {
+                debug_assert!(key < self.storage.len());
+                unsafe {
+                    self.storage.overwrite(key, segment);
+                }
+                key
+            }
+            None => {
+                let key = self.storage.len();
+                self.storage.push(segment);
+                key
+            }
+        }
+    }
+    /// Mark the slot as open for future overwrite.
+    ///
+    /// Keys are not globally unique. They will be reused.
+    /// Marking the slot unoccupied is logarithmic in the
+    /// number of open slots.
+    ///
+    /// Panics of the slot is already marked as open.
+    pub fn remove(&mut self, key: usize) {
+        assert!(self.open_slots.insert(key));
+    }
+    /// Get a reference to a segment.
+    ///
+    /// Returns `None` if `key` is out of range
+    /// or the slot is marked as unoccupied. Key
+    /// look up is logarithmic in the number of
+    /// open slots.
+    pub fn get(&self, key: usize) -> Option<&[T]> {
+        if self.open_slots.contains(&key) {
+            return None;
+        }
+        self.storage.get(key)
+    }
+    /// Get a mutable reference to a segment.
+    ///
+    /// Returns `None` if `key` is out of range
+    /// or the slot is marked as unoccupied. Key
+    /// look up is logarithmic in the number of
+    /// open slots.
+    pub fn get_mut(&mut self, key: usize) -> Option<&mut [T]> {
+        if self.open_slots.contains(&key) {
+            return None;
+        }
+        self.storage.get_mut(key)
+    }
+    /// Iterate over key, slice pairs.
+    ///
+    /// This will be slow if the slab is very sparse.
+    pub fn enumerate(&self) -> impl Iterator<Item = (usize, &[T])> {
+        self.storage
+            .enumerate()
+            .filter(|(key, _)| !self.open_slots.contains(key))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SlicedVec;
@@ -336,6 +468,7 @@ mod tests {
     fn test_slicedvec() {
         let mut a = slicedvec!([1, 2, 3], [4, 5, 6], [7, 8, 9]);
         assert!(a.is_valid_length(&[1, 2, 3, 4, 5, 6]));
+        assert_eq!(a.segment_len(), 3);
         assert_eq!(&a[0], &[1, 2, 3]);
         assert_eq!(&a[1], &[4, 5, 6]);
         assert_eq!(&a[2], &[7, 8, 9]);
@@ -391,5 +524,8 @@ mod tests {
         w.swap_truncate(0);
         assert_eq!(w.len(), 0);
         assert!(w.is_empty());
+        let a = slicedvec![[1, 2, 3], [4, 5, 6]];
+        let aa: Vec<_> = a.into();
+        assert_eq!(aa.len(), 6);
     }
 }
