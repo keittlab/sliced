@@ -324,7 +324,7 @@ where
     }
 }
 
-/// Contruct a `SlicedVec` from a list of arrays
+/// Construct a `SlicedVec` from a list of arrays
 ///
 /// # Example
 ///
@@ -395,7 +395,7 @@ where
     /// The first available slot is overwritten
     /// with the contents of the slice. Otherwise,
     /// the slice is appended to the storage. Returns
-    /// a key for later retreivel.
+    /// a key for later retrieval.
     ///
     /// Panics if the length of the slice does
     /// not match the segments size of the slab.
