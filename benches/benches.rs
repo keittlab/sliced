@@ -32,7 +32,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 .for_each(|segment| x1.push(segment));
         })
     });
-    c.bench_function("vec", |b| {
+    c.bench_function("vec_of_vec", |b| {
         b.iter(|| {
             for i in 0..500 {
                 x2.swap_remove(i);

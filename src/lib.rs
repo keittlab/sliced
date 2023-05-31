@@ -78,6 +78,26 @@ where
             segment_len,
         }
     }
+    /// Initialize a `SlicedVec` from a vector.
+    ///
+    /// Panics if `segment_len` is zero or the length of `data`
+    /// is not a multiple of `segment_len`.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::SlicedVec;
+    /// let sv = SlicedVec::from_vec(3, (1..=9).collect());
+    /// assert_eq!(sv[0], [1, 2, 3]);
+    /// ```
+    pub fn from_vec(segment_len: usize, data: Vec<T>) -> Self {
+        assert_ne!(segment_len, 0);
+        assert_eq!(data.len() % segment_len, 0);
+        Self {
+            storage: data,
+            segment_len,
+        }
+    }
+
     /// Get the internal segment length
     pub fn segment_len(&self) -> usize {
         self.segment_len
@@ -429,14 +449,39 @@ where
     /// Initialize a `SlicedSlab` and set the capacity and segment size.
     ///
     /// Panics if `segment_len` is zero.
-    pub fn with_capacity(size: usize, segment_len: usize) -> Self {
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::SlicedSlab;
+    /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
+    /// ss.release(1);
+    /// assert_eq!(ss.get_keys(), vec![0, 2]);
+    /// ```
+    pub fn from_vec(segment_len: usize, data: Vec<T>) -> Self {
         assert_ne!(segment_len, 0);
         Self {
-            slots: SlicedVec::with_capacity(size, segment_len),
+            slots: SlicedVec::from_vec(segment_len, data),
             open_slots: BTreeSet::new(),
         }
     }
-    #[must_use]
+    /// Iterate over active keys.
+    /// 
+    /// # Example
+    /// ```
+    /// use slicedvec::{SlicedVec, SlicedSlab};
+    /// let mut sv = SlicedVec::new(3);
+    /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
+    /// ss.release(1);
+    /// ss.iter_keys().for_each(|key| sv.push(&ss[key]));
+    /// assert_eq!(sv[1], ss[2]);
+    /// ```
+    pub fn iter_keys(&self) -> impl Iterator<Item = usize> + '_ {
+        (0..self.slots.len()).filter(|key| !self.open_slots.contains(key))
+    }
+    /// Get active keys.
+    pub fn get_keys(&self) -> Vec<usize> {
+        self.iter_keys().collect()
+    }
     /// Insert a segment into the slab.
     ///
     /// The first available slot is overwritten
@@ -463,6 +508,17 @@ where
             }
         }
     }
+    /// Insert a vector into the slab.
+    /// 
+    /// # Example
+    /// ```
+    /// use slicedvec::SlicedSlab;
+    /// let mut ss = SlicedSlab::new(3);
+    /// assert_eq!(ss.insert_vec((1..=3).collect()), 0);
+    /// ```
+    pub fn insert_vec(&mut self, data: Vec<T>) -> usize {
+        self.insert(data.as_slice())
+    }
     /// Move a segment and return a new key.
     ///
     /// If there are no empty slots or the first
@@ -473,12 +529,23 @@ where
     /// is marked as unoccupied and the new key is returned.
     ///
     /// Panics if the old key is unoccupied.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::SlicedSlab;
+    /// let mut ss = SlicedSlab::new(3);
+    /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
+    /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
+    /// ss.release(0);
+    /// assert_eq!(ss.rekey(1), 0);
+    /// assert_eq!(ss[0], [4, 5, 6]);
+    /// ```
     pub fn rekey(&mut self, oldkey: usize) -> usize {
         debug_assert!(oldkey < self.slots.len());
         if self.open_slots.first() < Some(&oldkey) {
             match self.open_slots.pop_first() {
                 Some(newkey) => {
-                    self.remove(oldkey);
+                    self.release(oldkey);
                     debug_assert!(newkey < self.slots.len());
                     let src = self.slots.storage_range(oldkey);
                     let dst = self.slots.storage_begin(newkey);
@@ -510,7 +577,7 @@ where
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
     /// assert_eq!(ss.insert(&[7, 8, 9]), 2);
-    /// ss.remove(1);
+    /// ss.release(1);
     /// assert_eq!(ss.load(), 1./3.);
     /// ss.compact();
     /// assert_eq!(ss.load(), 1./3.);
@@ -550,7 +617,7 @@ where
     /// number of open slots.
     ///
     /// Panics of the slot is already marked as open.
-    pub fn remove(&mut self, key: usize) {
+    pub fn release(&mut self, key: usize) {
         assert!(key < self.slots.len());
         assert!(self.open_slots.insert(key));
         debug_assert!(self.open_slots.len() <= self.slots.len());
@@ -591,17 +658,18 @@ where
 
 /// Get segment from slab.
 ///
-/// Will return whatever it finds at index
-/// regardless of whether it is marked unoccupied.
+/// This will return whatever it finds at index
+/// regardless of whether it is occupied
+/// or released.
+///
 /// # Example
 /// ```
 /// use slicedvec::SlicedSlab;
-/// let mut ss = SlicedSlab::new(3);
-/// assert_eq!(ss.insert(&[1, 2, 3]), 0);
-/// assert_eq!(ss.insert(&[4, 5, 6]), 1);
-/// assert_eq!(ss.insert(&[7, 8, 9]), 2);
-/// ss.remove(1);
+/// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
+/// ss.release(1);
 /// assert_eq!(ss[1], [4, 5, 6]);
+/// assert_eq!(ss.insert(&[3, 2, 1]), 1);
+/// assert_eq!(ss[1], [3, 2, 1]);
 /// ```
 impl<T> Index<usize> for SlicedSlab<T>
 where
@@ -615,9 +683,9 @@ where
 
 /// Get mutable segment from slab.
 ///
-/// Will return whatever it finds at index
-/// regardless of whether it is marked unoccupied. Use `get`
-/// to detect empty slots.
+/// This will return whatever it finds at index
+/// regardless of whether it is occupied
+/// or released.
 impl<T> IndexMut<usize> for SlicedSlab<T>
 where
     T: Copy + Clone,
