@@ -278,6 +278,7 @@ where
         self.storage_range(self.last_index())
     }
     fn last_index(&self) -> usize {
+        debug_assert!(!self.is_empty());
         self.len() - 1
     }
     unsafe fn overwrite(&mut self, index: usize, segment: &[T]) {
@@ -361,7 +362,7 @@ pub struct SlicedSlab<T>
 where
     T: Copy + Clone,
 {
-    storage: SlicedVec<T>,
+    slots: SlicedVec<T>,
     open_slots: BTreeSet<usize>,
 }
 
@@ -375,7 +376,7 @@ where
     pub fn new(segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
-            storage: SlicedVec::new(segment_len),
+            slots: SlicedVec::new(segment_len),
             open_slots: BTreeSet::new(),
         }
     }
@@ -385,7 +386,7 @@ where
     pub fn with_capacity(size: usize, segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
-            storage: SlicedVec::with_capacity(size, segment_len),
+            slots: SlicedVec::with_capacity(size, segment_len),
             open_slots: BTreeSet::new(),
         }
     }
@@ -400,20 +401,77 @@ where
     /// Panics if the length of the slice does
     /// not match the segments size of the slab.
     pub fn insert(&mut self, segment: &[T]) -> usize {
-        assert_eq!(segment.len(), self.storage.segment_len());
+        assert_eq!(segment.len(), self.slots.segment_len());
         match self.open_slots.pop_first() {
             Some(key) => {
-                debug_assert!(key < self.storage.len());
+                debug_assert!(key < self.slots.len());
                 unsafe {
-                    self.storage.overwrite(key, segment);
+                    self.slots.overwrite(key, segment);
                 }
                 key
             }
             None => {
-                let key = self.storage.len();
-                self.storage.push(segment);
+                let key = self.slots.len();
+                self.slots.push(segment);
                 key
             }
+        }
+    }
+    /// Move a segment and return a new key.
+    ///
+    /// If there are no empty slots or the first
+    /// empty slot key is not less than the old key,
+    /// no action is taken and the old key is returned.
+    /// Otherwise, the contents at old key are copied to
+    /// the location of the new key and the old key slot
+    /// is marked as unoccupied and the new key is returned.
+    ///
+    /// Panics if the old key is unoccupied.
+    pub fn rekey(&mut self, oldkey: usize) -> usize {
+        debug_assert!(oldkey < self.slots.len());
+        if self.open_slots.first() < Some(&oldkey) {
+            match self.open_slots.pop_first() {
+                Some(newkey) => {
+                    self.remove(oldkey);
+                    debug_assert!(newkey < self.slots.len());
+                    let src = self.slots.storage_range(oldkey);
+                    let dst = self.slots.storage_begin(newkey);
+                    self.slots.storage.copy_within(src, dst);
+                    newkey
+                }
+                None => oldkey,
+            }
+        } else {
+            oldkey
+        }
+    }
+    /// Removes open slots at the end of the slab.
+    /// 
+    /// If after all key-holders call rekey, this
+    /// function will remove all open slots, thus
+    /// fully compacting the slab. The storage capacity
+    /// is not affected. This will greatly increase the
+    /// speed of key lookups as there will be no open
+    /// slots to search. Subsequent insertions will all
+    /// be pushed to the end of the storage. If all
+    /// slots are open, the slab will be empty after
+    /// this call.
+    pub fn compact(&mut self) {
+        if self.open_slots.len() == self.slots.len() {
+            self.open_slots.clear();
+            self.slots.clear()
+        } else {
+            debug_assert!(!self.slots.is_empty());
+            debug_assert!(self.open_slots.len() < self.slots.len());
+            let mut key = self.slots.last_index();
+            while self.open_slots.last() == Some(&key) {
+                self.open_slots.pop_last();
+                debug_assert!(key > 0);
+                key -= 1;
+            }
+            self.slots
+                .storage
+                .truncate((key + 1) * self.slots.segment_len);
         }
     }
     /// Mark the slot as open for future overwrite.
@@ -424,7 +482,9 @@ where
     ///
     /// Panics of the slot is already marked as open.
     pub fn remove(&mut self, key: usize) {
+        assert!(key < self.slots.len());
         assert!(self.open_slots.insert(key));
+        debug_assert!(self.open_slots.len() <= self.slots.len());
     }
     /// Get a reference to a segment.
     ///
@@ -436,7 +496,7 @@ where
         if self.open_slots.contains(&key) {
             return None;
         }
-        self.storage.get(key)
+        self.slots.get(key)
     }
     /// Get a mutable reference to a segment.
     ///
@@ -448,13 +508,13 @@ where
         if self.open_slots.contains(&key) {
             return None;
         }
-        self.storage.get_mut(key)
+        self.slots.get_mut(key)
     }
     /// Iterate over key, slice pairs.
     ///
     /// This will be slow if the slab is very sparse.
     pub fn enumerate(&self) -> impl Iterator<Item = (usize, &[T])> {
-        self.storage
+        self.slots
             .enumerate()
             .filter(|(key, _)| !self.open_slots.contains(key))
     }
