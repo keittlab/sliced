@@ -1,16 +1,22 @@
 #![allow(dead_code)]
-//! Storing vectors within vectors is convenient but means that each
-//! stored vector will allocate on the heap and drop when removed. SlicedVec
-//! stores constant-length segments within a single vector so that `push`
-//! within the storage capacity will not allocate and `truncate` will not
-//! deallocate from the heap. Benchmarks indicate that this strategy is not
-//! always faster for repeated cycles of `push` and `swap_remove`. This is
-//! likely because the overhead of swapping a larger number of elements. `Vec`
-//! within `Vec` only has to swap the pointers of the stored `Vec` objects
-//! whereas `SlicedVec` has to swap an entire segment of values. In a few cases,
-//! `SlicedVec` has proven about twice as fast, but you will need to test your
-//! cases. `SlicedVec` is nonetheless convenient for organizing segmented storage,
-//! such as a collection of image rows, and so on.
+//! Two structs are provided: `SlicedVec` and `SlicedSlab`. The target use-case is needing to repeatedly
+//! construct and drop short sequences of floats. This is a common pattern in evolutionary computation where
+//! collections of solutions are created and a best subset are retained. Using a `Vec<Vec<T>>` in this case
+//! means that each newly created solution will allocate and the discarded solution will drop storage. The
+//! result is thrashing the allocator, unless a pool or some other mechanism is used. `SlicedVec` stores a
+//! collection of run-time sized slices in a single vector. It emulates a `Vec<&[T]>` but owns and manages
+//! its own storage. Methods are available for constant-time, non-order-preserving insertion and deletion.
+//! Repeated generations of `push` and `swap_remove` (or `swap_truncate`) will not allocate because the capacity
+//! of the storage will grow as needed.
+//! 
+//! `SlicedSlab` is built on `SlicedVec` and returns stable keys to allocated sequences of values. When a sequence
+//! is inserted into the slab, it returns a key. The sequence can be retrieved or removed from the slab using the key.
+//! Removal simply marks the slot as unoccupied and it will be overwritten by subsequent inserts without allocation.
+//! Note that dropping elements of the removed sequence is deferred until an insert into that location. Methods are
+//! provided for rekeying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`, so
+//! most operations have complexity in the logarithm of the number of open slots. Im nost cases, the open slot set
+//! will be very small and entirely sit in cache. If it grows excessivly large, compation is needed to improve
+//! peformance. 
 //!
 //! # Example
 //!
