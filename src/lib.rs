@@ -42,7 +42,6 @@ use std::{
     collections::BTreeSet,
     ops::{Index, IndexMut, Range},
     ptr,
-    slice::{Iter, IterMut},
 };
 
 /// A segmented vector for iterating over slices of constant length.
@@ -289,11 +288,11 @@ where
         self.storage.chunks(self.segment_len).enumerate()
     }
     /// Iterate over the raw storage.
-    pub fn iter_storage(&self) -> Iter<'_, T> {
+    pub fn iter_storage(&self) -> impl Iterator<Item = &T> {
         self.storage.iter()
     }
     /// Mutable iteration over the raw storage.
-    pub fn iter_mut_storage(&mut self) -> IterMut<'_, T> {
+    pub fn iter_mut_storage(&mut self) -> impl Iterator<Item = &mut T> {
         self.storage.iter_mut()
     }
     /// Clear the contents.
