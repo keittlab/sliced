@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-//! Two structs are provided: `SlicedVec` and `SlicedSlab`. The target use-case is needing to repeatedly
+//! Two structs are provided: `SlicedVec` and `SlicedSlab`. The target use-case is a need to repeatedly
 //! construct and drop short sequences of floats. This is a common pattern in evolutionary computation where
 //! collections of solutions are created and a best subset are retained. Using a `Vec<Vec<T>>` in this case
 //! means that each newly created solution will allocate and the discarded solution will drop storage. The
@@ -13,10 +13,10 @@
 //! is inserted into the slab, it returns a key. The sequence can be retrieved or removed from the slab using the key.
 //! Removal simply marks the slot as unoccupied and it will be overwritten by subsequent inserts without allocation.
 //! Note that dropping elements of the removed sequence is deferred until an insert into that location. Methods are
-//! provided for rekeying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`, so
-//! most operations have complexity in the logarithm of the number of open slots. Im nost cases, the open slot set
-//! will be very small and entirely sit in cache. If it grows excessivly large, compation is needed to improve
-//! peformance. 
+//! provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`, so
+//! most operations have complexity in the logarithm of the number of open slots. In most cases, the open slot set
+//! will be very small and entirely sit in cache. If it grows excessively large, compaction is needed to improve
+//! performance. 
 //!
 //! # Example
 //!
@@ -183,6 +183,30 @@ where
         let range = self.storage_range(index);
         self.storage.get_mut(range)
     }
+    /// Get a reference to a segment.
+    ///
+    /// Returns `None` if `index` is out of range.
+    pub fn first(&self) -> Option<&[T]> {
+        self.get(0)
+    }
+    /// Get a mutable reference to a segment.
+    ///
+    /// Returns `None` if `index` is out of range.
+    pub fn first_mut(&mut self) -> Option<&mut [T]> {
+        self.get_mut(0)
+    }
+    /// Get a reference to a segment.
+    ///
+    /// Returns `None` if `index` is out of range.
+    pub fn last(&self) -> Option<&[T]> {
+        self.get(self.last_index())
+    }
+    /// Get a mutable reference to a segment.
+    ///
+    /// Returns `None` if `index` is out of range.
+    pub fn last_mut(&mut self) -> Option<&mut [T]> {
+        self.get_mut(self.last_index())
+    }
     /// Remove and return a segment.
     ///
     /// Does not preserve the order of segments.
@@ -215,6 +239,21 @@ where
             let dst = self.storage_begin(index);
             self.storage.copy_within(src, dst)
         }
+        self.truncate_last()
+    }
+    /// Drop the last segment.
+    /// 
+    /// # Example
+    /// ```
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6]];
+    /// sv.truncate_last();
+    /// assert_eq!(sv.last(), Some([1, 2, 3].as_slice()));
+    /// assert_eq!(sv.first(), sv.last());
+    /// assert_eq!(sv.len(), 1);
+    /// ```
+    pub fn truncate_last(&mut self) {
+        debug_assert!(!self.storage.is_empty());
         self.storage.truncate(self.storage.len() - self.segment_len)
     }
     /// Non-order-preserving insert.
@@ -266,15 +305,12 @@ where
         self.len() == 0
     }
     fn storage_begin(&self, index: usize) -> usize {
-        debug_assert!(index < self.len());
         index * self.segment_len
     }
     fn storage_end(&self, index: usize) -> usize {
-        debug_assert!(index < self.len());
         self.storage_begin(index) + self.segment_len
     }
     fn storage_range(&self, index: usize) -> Range<usize> {
-        debug_assert!(index < self.len());
         self.storage_begin(index)..self.storage_end(index)
     }
     fn storage_range_range(&self, begin: usize, end: usize) -> Range<usize> {
@@ -283,10 +319,12 @@ where
     fn storage_range_last(&self) -> Range<usize> {
         self.storage_range(self.last_index())
     }
+    // Caller is responsible for ensuring length is sufficient
     fn last_index(&self) -> usize {
         debug_assert!(!self.is_empty());
         self.len() - 1
     }
+    // Caller is responsible for ensuring bounds are safe
     unsafe fn overwrite(&mut self, index: usize, segment: &[T]) {
         debug_assert!(index < self.len());
         debug_assert_eq!(self.segment_len, segment.len());
@@ -297,7 +335,7 @@ where
         )
     }
     fn is_valid_length(&self, data: &[T]) -> bool {
-        (!data.is_empty()) && data.len() % self.segment_len == 0
+        data.len() % self.segment_len == 0 && !data.is_empty()
     }
 }
 
@@ -338,6 +376,9 @@ where
 /// ```
 /// use slicedvec::{slicedvec, SlicedVec};
 /// let x = slicedvec![[1, 2, 3], [4, 5, 6]];
+/// assert_eq!(x.get(0), Some([1, 2, 3].as_slice()));
+/// assert_eq!(x.get(2), None);
+/// assert_eq!(x[1], [4, 5, 6]);
 /// assert_eq!(x.len(), 2);
 /// ```
 ///
@@ -469,16 +510,20 @@ where
         } else {
             debug_assert!(!self.slots.is_empty());
             debug_assert!(self.open_slots.len() < self.slots.len());
-            let mut key = self.slots.last_index();
-            while self.open_slots.last() == Some(&key) {
+            let mut len = self.slots.len();
+            while self.open_slots.last() == Some(&(len - 1)) {
                 self.open_slots.pop_last();
-                debug_assert!(key > 0);
-                key -= 1;
+                debug_assert!(len > 0);
+                len -= 1;
             }
             self.slots
                 .storage
-                .truncate((key + 1) * self.slots.segment_len);
+                .truncate(len * self.slots.segment_len);
         }
+    }
+    /// Compute the proportion of open slots.
+    pub fn load(&self) -> f32 {
+        self.open_slots.len() as f32 / self.slots.len() as f32
     }
     /// Mark the slot as open for future overwrite.
     ///
