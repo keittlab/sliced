@@ -95,7 +95,6 @@ where
             segment_len,
         }
     }
-
     /// Get the internal segment length
     pub fn segment_len(&self) -> usize {
         self.segment_len
@@ -144,6 +143,17 @@ where
     /// Panics if `index` is out of bounds or if the
     /// length of `segment` is not the native segment
     /// size of the `SlicedVec`.
+    /// 
+    /// # Example
+    /// ```
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let mut sv = slicedvec![[1, 2],[3, 4]];
+    /// // [1,2][3,4]
+    /// sv.insert(0, &[5, 6]);
+    /// // [5,6][1,2][3,4]
+    /// assert_eq!(sv.len(), 3);
+    /// assert_eq!(sv[0], [5, 6]);
+    /// ```
     pub fn insert(&mut self, index: usize, segment: &[T]) {
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
@@ -154,6 +164,7 @@ where
             let dst = self.storage_begin(index + 1);
             self.storage.copy_within(src, dst);
         }
+        // Requires index in bounds
         unsafe { self.overwrite(index, segment) }
     }
     /// Add one or more segments to the end.
@@ -200,25 +211,25 @@ where
         let range = self.storage_range(index);
         self.storage.get_mut(range)
     }
-    /// Get a reference to a segment.
+    /// Get a reference to the first segment.
     ///
     /// Returns `None` if `index` is out of range.
     pub fn first(&self) -> Option<&[T]> {
         self.get(0)
     }
-    /// Get a mutable reference to a segment.
+    /// Get a mutable reference to the first segment.
     ///
     /// Returns `None` if `index` is out of range.
     pub fn first_mut(&mut self) -> Option<&mut [T]> {
         self.get_mut(0)
     }
-    /// Get a reference to a segment.
+    /// Get a reference to the last segment.
     ///
     /// Returns `None` if `index` is out of range.
     pub fn last(&self) -> Option<&[T]> {
         self.get(self.last_index())
     }
-    /// Get a mutable reference to a segment.
+    /// Get a mutable reference to the last segment.
     ///
     /// Returns `None` if `index` is out of range.
     pub fn last_mut(&mut self) -> Option<&mut [T]> {
@@ -308,10 +319,10 @@ where
     /// ```
     /// use slicedvec::SlicedVec;
     /// let mut sv = SlicedVec::from_vec(3, (1..=9).collect());
-    /// sv.relocate_overwrite(0, &[1, 2, 3]);
+    /// sv.relocate_insert(0, &[1, 2, 3]);
     /// assert_eq!(sv.first(), sv.last());
     /// ```
-    pub fn relocate_overwrite(&mut self, index: usize, segment: &[T]) {
+    pub fn relocate_insert(&mut self, index: usize, segment: &[T]) {
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
         self.storage.extend_from_within(self.storage_range(index));
@@ -612,7 +623,7 @@ where
     /// function will remove all open slots, thus
     /// fully compacting the slab. The storage capacity
     /// is not affected. This will greatly increase the
-    /// speed of key lookups as there will be no open
+    /// speed of key look-ups as there will be no open
     /// slots to search. Subsequent insertions will all
     /// be pushed to the end of the storage. If all
     /// slots are open, the slab will be empty after
@@ -658,6 +669,8 @@ where
                 len -= 1;
             }
             self.slots.storage.truncate(len * self.slots.segment_len);
+            debug_assert!(self.open_slots.len() <= self.slots.len());
+            debug_assert!(self.open_slots.last() < Some(&(self.slots.len())));
         }
     }
     /// Compute the proportion of open slots.
@@ -774,7 +787,7 @@ mod tests {
         a.insert(1, &[3, 2, 1]);
         assert_eq!(&a[3], &[3, 6, 9]);
         assert_eq!(&a[1], &[3, 2, 1]);
-        a.relocate_overwrite(1, &[2, 2, 2]);
+        a.relocate_insert(1, &[2, 2, 2]);
         assert_eq!(&a[4], &[3, 2, 1]);
         assert_eq!(&a[1], &[2, 2, 2]);
         let mut v: SlicedVec<i32> = SlicedVec::new(3);
