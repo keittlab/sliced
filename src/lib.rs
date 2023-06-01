@@ -232,8 +232,17 @@ where
     /// Complexity is the segment length.
     ///
     /// Panics if index is out of range.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
+    /// let first = sv.swap_remove(0);
+    /// assert_eq!(first, vec![1, 2, 3]);
+    /// assert_eq!(sv[0], [7, 8, 9]);
+    /// ```
     pub fn swap_remove(&mut self, index: usize) -> Vec<T> {
-        debug_assert!(index < self.len());
+        assert!(index < self.len());
         if index != self.last_index() {
             self.storage_range(index)
                 .zip(self.storage_range_last())
@@ -251,40 +260,61 @@ where
     /// Complexity is the segment length.
     ///
     /// Panics if `index` is out of bounds.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
+    /// sv.swap_truncate(1);
+    /// assert_eq!(sv[1], [7, 8, 9]);
+    /// assert_eq!(sv.len(), 2);
+    /// ```
     pub fn swap_truncate(&mut self, index: usize) {
-        debug_assert!(index < self.len());
+        assert!(index < self.len());
         if index != self.last_index() {
             let src = self.storage_range_last();
             let dst = self.storage_begin(index);
             self.storage.copy_within(src, dst)
         }
-        self.truncate_last()
+        self.truncate(self.last_index());
     }
-    /// Drop the last segment.
+    /// Drop the last segment if present.
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
-    /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6]];
-    /// sv.truncate_last();
-    /// assert_eq!(sv.last(), Some([1, 2, 3].as_slice()));
-    /// assert_eq!(sv.first(), sv.last());
-    /// assert_eq!(sv.len(), 1);
+    /// use slicedvec::SlicedVec;
+    /// let mut sv = SlicedVec::<usize>::new(3);
+    /// sv.truncate(1);
+    /// assert_eq!(sv.len(), 0);
+    /// sv.push_vec((1..=9).collect());
+    /// sv.truncate(2);
+    /// assert_eq!(sv.last(), Some([4, 5, 6].as_slice()));
+    /// assert_eq!(sv.len(), 2);
+    /// assert_eq!(sv.storage_len(), 6);
     /// ```
-    pub fn truncate_last(&mut self) {
-        debug_assert!(!self.storage.is_empty());
-        self.storage.truncate(self.storage.len() - self.segment_len)
+    pub fn truncate(&mut self, len: usize) {
+        self.storage.truncate(len * self.segment_len);
     }
     /// Non-order-preserving insert.
     ///
     /// Appends the contents of the segment at `index`
     /// to the end of the storage and then overwrites
-    /// the segment with the new values. Complexity is
-    /// the twice the segment length.
+    /// the segment with the new values. If `index` is
+    /// greater than or equal to `self.len()`, then the
+    /// segments is repeatedly pushed until it fills the
+    /// location given by `index`.
     ///
-    /// Panics if `index` is out of bounds.
-    pub fn swap_insert(&mut self, index: usize, segment: &[T]) {
-        debug_assert!(index < self.len());
+    /// Panics if `index` is out of range.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::SlicedVec;
+    /// let mut sv = SlicedVec::from_vec(3, (1..=9).collect());
+    /// sv.relocate_overwrite(0, &[1, 2, 3]);
+    /// assert_eq!(sv.first(), sv.last());
+    /// ```
+    pub fn relocate_overwrite(&mut self, index: usize, segment: &[T]) {
+        assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
         self.storage.extend_from_within(self.storage_range(index));
         unsafe { self.overwrite(index, segment) }
@@ -292,12 +322,29 @@ where
     /// Return a chunked iterator.
     ///
     /// Allows iteration over segments as slices.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
+    /// for slice in sv.iter() {
+    ///     assert_eq!(slice.len(), 3);
+    /// }
+    /// ```
     pub fn iter(&self) -> impl Iterator<Item = &[T]> {
         self.storage.chunks(self.segment_len)
     }
     /// Return a mutable chunked iterator.
     ///
     /// Allows iteration and modification of segments.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::{slicedvec, SlicedVec};
+    /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
+    /// sv.iter_mut().for_each(|slice| slice.swap(0, 2));
+    /// assert_eq!(sv[0], [3, 2, 1]);
+    /// ```
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut [T]> {
         self.storage.chunks_mut(self.segment_len)
     }
@@ -465,7 +512,7 @@ where
         }
     }
     /// Iterate over active keys.
-    /// 
+    ///
     /// # Example
     /// ```
     /// use slicedvec::{SlicedVec, SlicedSlab};
@@ -509,7 +556,7 @@ where
         }
     }
     /// Insert a vector into the slab.
-    /// 
+    ///
     /// # Example
     /// ```
     /// use slicedvec::SlicedSlab;
@@ -715,7 +762,7 @@ mod tests {
         a.insert(1, &[3, 2, 1]);
         assert_eq!(&a[3], &[3, 6, 9]);
         assert_eq!(&a[1], &[3, 2, 1]);
-        a.swap_insert(1, &[2, 2, 2]);
+        a.relocate_overwrite(1, &[2, 2, 2]);
         assert_eq!(&a[4], &[3, 2, 1]);
         assert_eq!(&a[1], &[2, 2, 2]);
         let mut v: SlicedVec<i32> = SlicedVec::new(3);
