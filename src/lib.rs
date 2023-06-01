@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! Two structs are provided: `SlicedVec` and `SlicedSlab`. The target use-case is a need to repeatedly
-//! construct and drop short, run-time sized sequences of floats. Using a `Vec<Vec<T>>` can result thrash
-//! the allocator, unless a pool or some other mechanism is used. `SlicedVec` stores a
+//! construct and drop short, run-time sized sequences of floats. Using a `Vec<Vec<T>>` may cause allocator thrashing,
+//! unless a pool or some other mechanism is used. `SlicedVec` stores a
 //! collection of run-time sized slices in a single vector. It emulates a `Vec<&[T]>` but owns and manages
 //! its own storage. Methods are available for constant-time, non-order-preserving insertion and deletion.
 //! Repeated generations of `push` and `swap_remove` (or `swap_truncate`) will not allocate because the capacity
@@ -14,7 +14,8 @@
 //! provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`, so
 //! most operations have complexity in the logarithm of the number of open slots. In most cases, the open slot set
 //! will be very small and entirely sit in cache. If it grows excessively large, compaction is needed to improve
-//! performance.
+//! performance. The advantage of always inserting into the lowest-rank available slot outweighs the small cost of
+//! the `BTreeSet` as it reduces fragmentation.
 //!
 //! # Example
 //!
@@ -143,7 +144,7 @@ where
     /// Panics if `index` is out of bounds or if the
     /// length of `segment` is not the native segment
     /// size of the `SlicedVec`.
-    /// 
+    ///
     /// # Example
     /// ```
     /// use slicedvec::{slicedvec, SlicedVec};
@@ -287,12 +288,15 @@ where
         }
         self.truncate(self.last_index());
     }
-    /// Drop the last segment if present.
+    /// Truncate the storage to `len` segments.
+    ///
+    /// If `len` is greater than the number of
+    /// segments, nothing happens.
     ///
     /// # Example
     /// ```
     /// use slicedvec::SlicedVec;
-    /// let mut sv = SlicedVec::<usize>::new(3);
+    /// let mut sv = SlicedVec::<i32>::new(3);
     /// sv.truncate(1);
     /// assert_eq!(sv.len(), 0);
     /// sv.push_vec((1..=9).collect());
@@ -304,7 +308,7 @@ where
     pub fn truncate(&mut self, len: usize) {
         self.storage.truncate(len * self.segment_len);
     }
-    /// Non-order-preserving insert.
+    /// Non-order-preserving, constant-time insert.
     ///
     /// Appends the contents of the segment at `index`
     /// to the end of the storage and then overwrites
@@ -326,6 +330,7 @@ where
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
         self.storage.extend_from_within(self.storage_range(index));
+        // Requires index in bounds
         unsafe { self.overwrite(index, segment) }
     }
     /// Return a chunked iterator.
@@ -553,6 +558,7 @@ where
             Some(key) => {
                 debug_assert!(key < self.slots.len());
                 unsafe {
+                    // Requires key is in bounds
                     self.slots.overwrite(key, segment);
                 }
                 key
@@ -575,9 +581,9 @@ where
     pub fn insert_vec(&mut self, data: Vec<T>) -> usize {
         self.insert(data.as_slice())
     }
-    /// Move a segment and return a new key.
+    /// Copy a segment and return a new key.
     ///
-    /// There is an open slot closer to the
+    /// If there exists an open slot closer to the
     /// start of the slab, then the data pointed
     /// to by `oldkey` will be moved there and
     /// a new key will be returned. Otherwise, no
@@ -619,13 +625,13 @@ where
     }
     /// Removes open slots at the end of the slab.
     ///
-    /// If after all key-holders call rekey, this
+    /// If all key-holders have called rekey, this
     /// function will remove all open slots, thus
     /// fully compacting the slab. The storage capacity
     /// is not affected. This will greatly increase the
     /// speed of key look-ups as there will be no open
     /// slots to search. Subsequent insertions will all
-    /// be pushed to the end of the storage. If all
+    /// be pushed to the end of the storage. Or if all
     /// slots are open, the slab will be empty after
     /// this call.
     ///
@@ -654,9 +660,16 @@ where
     /// ss.compact();
     /// // [occ][occ]
     /// assert_eq!(ss.sparsity(), 0.0);
+    /// ss.release(1);
+    /// ss.compact();
+    /// assert_eq!(ss.get_keys().into_iter().max().unwrap(), 0);
+    /// ss.release(0);
+    /// ss.compact();
+    /// assert!(ss.get_keys().is_empty());
     /// ```
     pub fn compact(&mut self) {
         if self.open_slots.len() == self.slots.len() {
+            // Covers empty case
             self.open_slots.clear();
             self.slots.clear()
         } else {
@@ -674,7 +687,7 @@ where
         }
     }
     /// Compute the proportion of open slots.
-    /// 
+    ///
     /// A sparsity of 0.0 indicates no open slots and
     /// insertions will be pushed at the end of the storage.
     /// A sparsity of 1.0 indicates only open slots and compaction
@@ -691,6 +704,8 @@ where
     /// Panics of the slot is already marked as open.
     pub fn release(&mut self, key: usize) {
         assert!(key < self.slots.len());
+        // This is the only site where keys are added
+        // The assertion ensures that no key is out of bounds
         assert!(self.open_slots.insert(key));
         debug_assert!(self.open_slots.len() <= self.slots.len());
     }
@@ -721,6 +736,17 @@ where
     /// Iterate over key, slice pairs.
     ///
     /// This will be slow if the slab is very sparse.
+    ///
+    /// # Example
+    /// ```
+    /// use slicedvec::SlicedSlab;
+    /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
+    /// ss.release(1);
+    /// let s: usize = ss.enumerate()
+    ///     .map(|(_, slice)| slice.len())
+    ///     .fold(0, |sum, val| sum + val);
+    /// assert_eq!(s, 6);
+    /// ```
     pub fn enumerate(&self) -> impl Iterator<Item = (usize, &[T])> {
         self.slots
             .enumerate()
@@ -733,6 +759,8 @@ where
 /// This will return whatever it finds at index
 /// regardless of whether it is occupied
 /// or released.
+///
+/// Panics if `index` is out of range.
 ///
 /// # Example
 /// ```
@@ -753,11 +781,21 @@ where
     }
 }
 
-/// Get mutable segment from slab.
+/// Get segment from slab.
 ///
 /// This will return whatever it finds at index
 /// regardless of whether it is occupied
 /// or released.
+///
+/// Panics if `index` is out of range.
+/// # Example
+/// ```
+/// use slicedvec::SlicedSlab;
+/// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
+/// ss.release(1);
+/// ss[1][1] = 0;
+/// assert_eq!(ss[1], [4, 0, 6]);
+/// ```
 impl<T> IndexMut<usize> for SlicedSlab<T>
 where
     T: Copy + Clone,
