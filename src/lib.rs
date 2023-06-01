@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 //! Two structs are provided: `SlicedVec` and `SlicedSlab`. The target use-case is a need to repeatedly
-//! construct and drop short, run-time sized sequences of floats. This is a common pattern in evolutionary computation where
-//! collections of solutions are created and a best subset are retained. Using a `Vec<Vec<T>>` in this case
-//! means that each newly created solution will allocate and the discarded solution will drop storage. The
-//! result is thrashing the allocator, unless a pool or some other mechanism is used. `SlicedVec` stores a
+//! construct and drop short, run-time sized sequences of floats. Using a `Vec<Vec<T>>` can result thrash
+//! the allocator, unless a pool or some other mechanism is used. `SlicedVec` stores a
 //! collection of run-time sized slices in a single vector. It emulates a `Vec<&[T]>` but owns and manages
 //! its own storage. Methods are available for constant-time, non-order-preserving insertion and deletion.
 //! Repeated generations of `push` and `swap_remove` (or `swap_truncate`) will not allocate because the capacity
@@ -568,12 +566,12 @@ where
     }
     /// Move a segment and return a new key.
     ///
-    /// If there are no empty slots or the first
-    /// empty slot key is not less than the old key,
-    /// no action is taken and the old key is returned.
-    /// Otherwise, the contents at old key are copied to
-    /// the location of the new key and the old key slot
-    /// is marked as unoccupied and the new key is returned.
+    /// There is an open slot closer to the
+    /// start of the slab, then the data pointed
+    /// to by `oldkey` will be moved there and
+    /// a new key will be returned. Otherwise, no
+    /// action is taken and `oldkey` is returned
+    /// unchanged.
     ///
     /// Panics if the old key is unoccupied.
     ///
@@ -583,8 +581,11 @@ where
     /// let mut ss = SlicedSlab::new(3);
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
+    /// // [occ][occ]
     /// ss.release(0);
+    /// // [vac][occ]
     /// assert_eq!(ss.rekey(1), 0);
+    /// // [occ][vac]
     /// assert_eq!(ss[0], [4, 5, 6]);
     /// ```
     pub fn rekey(&mut self, oldkey: usize) -> usize {
@@ -624,18 +625,24 @@ where
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
     /// assert_eq!(ss.insert(&[7, 8, 9]), 2);
+    /// // [occ][occ][occ]
     /// ss.release(1);
-    /// assert_eq!(ss.load(), 1./3.);
+    /// // [occ][vac][occ]
+    /// assert_eq!(ss.sparsity(), 1./3.);
     /// ss.compact();
-    /// assert_eq!(ss.load(), 1./3.);
+    /// // [occ][vac][occ]
+    /// assert_eq!(ss.sparsity(), 1./3.);
     /// assert_eq!(ss.get(1), None);
     /// assert_eq!(ss.rekey(0), 0);
+    /// // [occ][vac][occ]
     /// assert_eq!(ss.get(2), Some([7, 8, 9].as_slice()));
     /// assert_eq!(ss.rekey(2), 1);
+    /// // [occ][occ][vac]
     /// assert_eq!(ss.get(1), Some([7, 8, 9].as_slice()));
     /// assert_eq!(ss.get(2), None);
     /// ss.compact();
-    /// assert_eq!(ss.load(), 0.0);
+    /// // [occ][occ]
+    /// assert_eq!(ss.sparsity(), 0.0);
     /// ```
     pub fn compact(&mut self) {
         if self.open_slots.len() == self.slots.len() {
@@ -654,7 +661,12 @@ where
         }
     }
     /// Compute the proportion of open slots.
-    pub fn load(&self) -> f32 {
+    /// 
+    /// A sparsity of 0.0 indicates no open slots and
+    /// insertions will be pushed at the end of the storage.
+    /// A sparsity of 1.0 indicates only open slots and compaction
+    /// will lead to an empty slab.
+    pub fn sparsity(&self) -> f32 {
         self.open_slots.len() as f32 / self.slots.len() as f32
     }
     /// Mark the slot as open for future overwrite.
