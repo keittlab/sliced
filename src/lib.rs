@@ -30,12 +30,8 @@
 //!     slab.release(i);
 //! }
 //! for _ in 0..50 {
-//! let i = (&mut rng).gen_range(0..svec.len());
+//!     let i = (&mut rng).gen_range(0..svec.len());
 //!     keys.push(slab.insert(&svec[i]))
-//! }
-//! for _ in 0..50 {
-//!     let i = keys.swap_remove((&mut rng).gen_range(0..keys.len()));
-//!     slab.release(i);
 //! }
 //! ```
 
@@ -279,7 +275,7 @@ where
             .zip(self.storage_range(j))
             .for_each(|(a, b)| self.storage.swap(a, b))
     }
-    /// Swap a segment and truncate its storage.
+    /// Overwrite a segment from last and then truncate.
     ///
     /// Does not preserve the order of segments. The
     /// `SlicedVec` length will be reduced by one segment.

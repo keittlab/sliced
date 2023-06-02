@@ -1,5 +1,39 @@
 # [sliced](https://docs.rs/sliced)
 
-In a recent project, I found myself repeatedly pushing smallish, run-time sized random strings into a `Vec<Vec<f32>>` data structure. This was iterated with subsequent application of `swap_remove` or `nth_element` and `truncate` 10's of thousands to millions of times. Profiling indicated that the allocator was consuming a small but significant amount of time. This is because each inner `Vec<T>` allocates and deallocates memory on the heap, which is slow and causes fragmentation. So, I decided I needed a way to store all these uniform-length strings of random numbers in a single vector. The result is [this crate](https://docs.rs/sliced) which defines `SlicedVec<T>` and `SlicedSlab<T>` data structures. `SlicedVec<T>` emulates aspects of `Vec<Vec<T>>`, or more acturately a pseudo-`Vec<&[T]>`, but using a single `Vec<T>` for storage. The intention is to make this data structure as comfortable as using `Vec<T>` but having it return slices rather than single values. The length of the slices is fixed at intialization. A `SlicedSlab<T>` has segmented storage, but acts as a slab-allocator. Each insertion returns a key that can be used to retreive the data. The slots indicated by the keys can be released and new insertions will always be placed as far forward in the storage as possible. If no slots are open, the storage is extended. Of course, none of this is necessary if the length of the segments is known at compile time. But the length is a quantity of interest in the work, so I prefer to set it at initialization, not at compile time. I split this off into its own crate thinking it might be useful to others. Please raise an issue if you would like some added feature or would like to collaborate.
+Two structs are provided: `SlicedVec` and `SlicedSlab`. `SlicedVec` stores a
+collection of uniformly sized slices in a single vector. The segment length is determined at run-time
+during initialization. Methods are available for constant-time, non-order-preserving insertion and deletion.
+The erase-remove idiom is supported for for segments containing multiple values.
+
+`SlicedSlab` is built on `SlicedVec` and returns stable keys to allocated sequences of values. Methods are
+provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`
+so that new insert occur as close to the beginning of the storage as possible thereby reducing fragmentation.
+
+# Example
+```rust
+use rand::{rngs::SmallRng, Rng, SeedableRng, seq::SliceRandom};
+use rand_distr::StandardNormal;
+use sliced::{SlicedVec, SlicedSlab};
+let mut rng = SmallRng::from_entropy();
+let vals = (&mut rng).sample_iter(StandardNormal).take(1600).collect::<Vec<f32>>();
+let mut svec = SlicedVec::from_vec(16, vals);
+for _ in 0..100 {
+    let i = (&mut rng).gen_range(0..svec.len());
+    svec.relocate_truncate(i);
+    svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
+}
+let mut slab = SlicedSlab::new(16);
+let mut keys = Vec::new();
+svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
+for _ in 0..50 {
+    let i = keys.swap_remove((&mut rng).gen_range(0..keys.len()));
+    slab.release(i);
+}
+for _ in 0..50 {
+    let i = (&mut rng).gen_range(0..svec.len());
+    keys.push(slab.insert(&svec[i]))
+}
+```
+
 
   
