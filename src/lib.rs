@@ -507,7 +507,7 @@ where
             open_slots: BTreeSet::new(),
         }
     }
-    /// Initialize a `SlicedVec` and set the capacity and segment size.
+    /// Initialize a `SlicedSlab` and set the capacity and segment size.
     ///
     /// Panics if `segment_len` is zero.
     pub fn with_capacity(size: usize, segment_len: usize) -> Self {
