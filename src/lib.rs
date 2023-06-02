@@ -719,7 +719,7 @@ where
     /// assert_eq!(ss.sparsity(), 0.0);
     /// ss.release(1);
     /// ss.compact();
-    /// assert_eq!(ss.get_keys().into_iter().max().unwrap(), 0);
+    /// assert_eq!(ss.iter_keys().max().unwrap(), 0);
     /// ss.release(0);
     /// ss.compact();
     /// assert!(ss.get_keys().is_empty());
