@@ -1,7 +1,5 @@
-use std::ops::Div;
-
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{distributions::Standard, rngs::SmallRng, Rng, SeedableRng};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use sliced::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -27,7 +25,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("slicedvec", |b| {
         b.iter(|| {
             for i in 0..500 {
-                x1.swap_truncate(i);
+                x1.overwrite_truncate(i);
             }
             x1_insert.iter().for_each(|segment| x1.push(segment));
         })

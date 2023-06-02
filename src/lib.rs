@@ -19,7 +19,7 @@
 //! let mut svec = SlicedVec::from_vec(16, vals);
 //! for _ in 0..100 {
 //!     let i = (&mut rng).gen_range(0..svec.len());
-//!     svec.relocate_truncate(i);
+//!     svec.overwrite_truncate(i);
 //!     svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
 //! }
 //! let mut slab = SlicedSlab::new(16);
@@ -58,6 +58,15 @@ where
     /// Initialize a `SlicedVec` and set the segment size.
     ///
     /// Panics if `segment_len` is zero.
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::SlicedVec;
+    /// let mut sv = SlicedVec::new(10);
+    /// sv.push_vec((0..10).collect());
+    /// assert_eq!(sv.segment_len(), 10);
+    /// assert_eq!(sv.len(), 1);
+    /// ```
     pub fn new(segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -68,6 +77,15 @@ where
     /// Initialize a `SlicedVec` and set the capacity and segment size.
     ///
     /// Panics if `segment_len` is zero.
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::SlicedVec;
+    /// let mut sv = SlicedVec::with_capacity(1000, 10);
+    /// sv.push_vec((0..10).collect());
+    /// assert_eq!(sv.storage_capacity(), 10000);
+    /// assert_eq!(sv.capacity(), 1000);
+    /// ```
     pub fn with_capacity(size: usize, segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -95,10 +113,23 @@ where
         }
     }
     /// Get the internal segment length
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::{slicedvec, SlicedVec};
+    /// let sv = slicedvec![[1, 2], [3, 4, 5, 6]];
+    /// assert_eq!(sv.segment_len(), 2);
+    /// ```
     pub fn segment_len(&self) -> usize {
         self.segment_len
     }
     /// Returns the number of internal segments
+    /// # Example
+    /// ```
+    /// use sliced::{slicedvec, SlicedVec};
+    /// let sv = slicedvec![[1, 2], [3, 4, 5, 6]];
+    /// assert_eq!(sv.len(), 3);
+    /// ```
     pub fn len(&self) -> usize {
         self.storage.len() / self.segment_len
     }
@@ -287,11 +318,11 @@ where
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
-    /// sv.relocate_truncate(1);
+    /// sv.overwrite_truncate(1);
     /// assert_eq!(sv[1], [7, 8, 9]);
     /// assert_eq!(sv.len(), 2);
     /// ```
-    pub fn relocate_truncate(&mut self, index: usize) {
+    pub fn overwrite_truncate(&mut self, index: usize) {
         assert!(index < self.len());
         if index != self.last_index() {
             let src = self.storage_range_last();
@@ -905,14 +936,14 @@ mod tests {
         assert_eq!(w.get(0).unwrap()[2], 0);
         w.push(&[10, 20, 30, 40, 50]);
         w.push(&[100, 200, 300, 400, 500]);
-        w.relocate_truncate(0);
+        w.overwrite_truncate(0);
         assert_eq!(w.len(), 2);
         assert_eq!(&w[0], &[100, 200, 300, 400, 500]);
         assert_eq!(&w[1], &[10, 20, 30, 40, 50]);
-        w.relocate_truncate(1);
+        w.overwrite_truncate(1);
         assert_eq!(w.len(), 1);
         assert_eq!(&w[0], &[100, 200, 300, 400, 500]);
-        w.relocate_truncate(0);
+        w.overwrite_truncate(0);
         assert_eq!(w.len(), 0);
         assert!(w.is_empty());
         let a = slicedvec![[1, 2, 3], [4, 5, 6]];
