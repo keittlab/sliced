@@ -1,40 +1,42 @@
 #![allow(dead_code)]
-//! Two structs are provided: `SlicedVec` and `SlicedSlab`. The target use-case is a need to repeatedly
-//! construct and drop short, run-time sized sequences of floats. Using a `Vec<Vec<T>>` may cause allocator thrashing,
-//! unless a pool or some other mechanism is used. `SlicedVec` stores a
-//! collection of run-time sized slices in a single vector. It emulates a `Vec<&[T]>` but owns and manages
-//! its own storage. Methods are available for constant-time, non-order-preserving insertion and deletion.
-//! Repeated generations of `push` and `swap_remove` (or `swap_truncate`) will not allocate because the capacity
-//! of the storage will grow as needed.
+//! Two structs are provided: `SlicedVec` and `SlicedSlab`. `SlicedVec` stores a
+//! collection of uniformly sized slices in a single vector. The segment length is determined at run-time
+//! during initialization. Methods are available for constant-time, non-order-preserving insertion and deletion.
+//! The erase-remove idiom is supported for for segments containing multiple values.
 //!
-//! `SlicedSlab` is built on `SlicedVec` and returns stable keys to allocated sequences of values. When a sequence
-//! is inserted into the slab, it returns a key. The sequence can be retrieved or removed from the slab using the key.
-//! Removal simply marks the slot as unoccupied and it will be overwritten by subsequent inserts without allocation.
-//! Note that dropping elements of the removed sequence is deferred until an insert into that location. Methods are
-//! provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`, so
-//! most operations have complexity in the logarithm of the number of open slots. In most cases, the open slot set
-//! will be very small and entirely sit in cache. If it grows excessively large, compaction is needed to improve
-//! performance. The advantage of always inserting into the lowest-rank available slot outweighs the small cost of
-//! the `BTreeSet` as it reduces fragmentation.
+//! `SlicedSlab` is built on `SlicedVec` and returns stable keys to allocated sequences of values. Methods are
+//! provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`
+//! so that new insert occur as close to the beginning of the storage as possible thereby reducing fragmentation.
 //!
 //! # Example
 //!
 //! ```
-//! use rand::{rngs::SmallRng, Rng, SeedableRng};
-//! use sliced::SlicedVec;
+//! use rand::{rngs::SmallRng, Rng, SeedableRng, seq::SliceRandom};
+//! use rand_distr::StandardNormal;
+//! use sliced::{SlicedVec, SlicedSlab};
 //! let mut rng = SmallRng::from_entropy();
-//! let mut x1 = SlicedVec::with_capacity(1000, 20);
-//! x1.push_vec(
-//!     std::iter::repeat_with(|| rng.gen())
-//!     .take(20 * 1000)
-//!     .collect::<Vec<_>>(),
-//! );
-//! let x1_insert: Vec<Vec<usize>> =
-//!     std::iter::repeat_with(|| std::iter::repeat_with(|| rng.gen()).take(20).collect())
-//!         .take(500)
-//!         .collect();
-//! for i in 0..500 { x1.swap_truncate(i) }
-//! for i in 0..500 { x1.push(&x1_insert[i]) }
+//! let vals = (&mut rng).sample_iter(StandardNormal).take(1600).collect::<Vec<f32>>();
+//! let mut svec = SlicedVec::from_vec(16, vals);
+//! for _ in 0..100 {
+//!     let i = (&mut rng).gen_range(0..svec.len());
+//!     svec.relocate_truncate(i);
+//!     svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
+//! }
+//! let mut slab = SlicedSlab::new(16);
+//! let mut keys = Vec::new();
+//! svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
+//! for _ in 0..50 {
+//!     let i = keys.swap_remove((&mut rng).gen_range(0..keys.len()));
+//!     slab.release(i);
+//! }
+//! for _ in 0..50 {
+//! let i = (&mut rng).gen_range(0..svec.len());
+//!     keys.push(slab.insert(&svec[i]))
+//! }
+//! for _ in 0..50 {
+//!     let i = keys.swap_remove((&mut rng).gen_range(0..keys.len()));
+//!     slab.release(i);
+//! }
 //! ```
 
 use std::{
@@ -289,11 +291,11 @@ where
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
-    /// sv.swap_truncate(1);
+    /// sv.relocate_truncate(1);
     /// assert_eq!(sv[1], [7, 8, 9]);
     /// assert_eq!(sv.len(), 2);
     /// ```
-    pub fn swap_truncate(&mut self, index: usize) {
+    pub fn relocate_truncate(&mut self, index: usize) {
         assert!(index < self.len());
         if index != self.last_index() {
             let src = self.storage_range_last();
@@ -550,7 +552,7 @@ where
         }
     }
     /// Iterate over active keys.
-    /// 
+    ///
     /// This will be slow if the slab is sparse.
     ///
     /// # Example
@@ -566,7 +568,7 @@ where
         (0..self.slots.len()).filter(|key| !self.open_slots.contains(key))
     }
     /// Get active keys.
-    /// 
+    ///
     /// This will be slow if the slab is sparse.
     pub fn get_keys(&self) -> Vec<usize> {
         self.iter_keys().collect()
@@ -738,11 +740,11 @@ where
         debug_assert!(self.open_slots.len() <= self.slots.len());
     }
     /// Acquire a previously released slot.
-    /// 
+    ///
     /// This allows one to directly update
     /// the internal storage. Returns `None`
     /// if there are no open slots.
-    /// 
+    ///
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
@@ -907,14 +909,14 @@ mod tests {
         assert_eq!(w.get(0).unwrap()[2], 0);
         w.push(&[10, 20, 30, 40, 50]);
         w.push(&[100, 200, 300, 400, 500]);
-        w.swap_truncate(0);
+        w.relocate_truncate(0);
         assert_eq!(w.len(), 2);
         assert_eq!(&w[0], &[100, 200, 300, 400, 500]);
         assert_eq!(&w[1], &[10, 20, 30, 40, 50]);
-        w.swap_truncate(1);
+        w.relocate_truncate(1);
         assert_eq!(w.len(), 1);
         assert_eq!(&w[0], &[100, 200, 300, 400, 500]);
-        w.swap_truncate(0);
+        w.relocate_truncate(0);
         assert_eq!(w.len(), 0);
         assert!(w.is_empty());
         let a = slicedvec![[1, 2, 3], [4, 5, 6]];
