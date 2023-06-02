@@ -19,7 +19,7 @@ let vals = (&mut rng).sample_iter(StandardNormal).take(1600).collect::<Vec<f32>>
 let mut svec = SlicedVec::from_vec(16, vals);
 for _ in 0..100 {
     let i = (&mut rng).gen_range(0..svec.len());
-    svec.overwrite_truncate(i);
+    svec.overwrite_remove(i);
     svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
 }
 let mut slab = SlicedSlab::new(16);
