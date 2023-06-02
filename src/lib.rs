@@ -255,7 +255,6 @@ where
         assert!(index < self.len());
         if index != self.last_index() {
             self.swap(index, self.last_index());
-
         }
         self.storage
             .drain(self.storage_range_last())
