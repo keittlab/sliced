@@ -19,7 +19,7 @@
 //! let mut svec = SlicedVec::from_vec(16, vals);
 //! for _ in 0..100 {
 //!     let i = (&mut rng).gen_range(0..svec.len());
-//!     svec.overwrite_truncate(i);
+//!     svec.overwrite_remove(i);
 //!     svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
 //! }
 //! let mut slab = SlicedSlab::new(16);
@@ -318,11 +318,11 @@ where
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
-    /// sv.overwrite_truncate(1);
+    /// sv.overwrite_remove(1);
     /// assert_eq!(sv[1], [7, 8, 9]);
     /// assert_eq!(sv.len(), 2);
     /// ```
-    pub fn overwrite_truncate(&mut self, index: usize) {
+    pub fn overwrite_remove(&mut self, index: usize) {
         assert!(index < self.len());
         if index != self.last_index() {
             let src = self.storage_range_last();
@@ -820,8 +820,8 @@ where
     /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
     /// ss.release(1);
     /// let s: usize = ss.enumerate()
-    ///     .map(|(_, slice)| slice.len())
-    ///     .fold(0, |sum, val| sum + val);
+    ///     .map(|(key, slice)| key * slice.len())
+    ///     .sum();
     /// assert_eq!(s, 6);
     /// ```
     pub fn enumerate(&self) -> impl Iterator<Item = (usize, &[T])> {
@@ -936,14 +936,14 @@ mod tests {
         assert_eq!(w.get(0).unwrap()[2], 0);
         w.push(&[10, 20, 30, 40, 50]);
         w.push(&[100, 200, 300, 400, 500]);
-        w.overwrite_truncate(0);
+        w.overwrite_remove(0);
         assert_eq!(w.len(), 2);
         assert_eq!(&w[0], &[100, 200, 300, 400, 500]);
         assert_eq!(&w[1], &[10, 20, 30, 40, 50]);
-        w.overwrite_truncate(1);
+        w.overwrite_remove(1);
         assert_eq!(w.len(), 1);
         assert_eq!(&w[0], &[100, 200, 300, 400, 500]);
-        w.overwrite_truncate(0);
+        w.overwrite_remove(0);
         assert_eq!(w.len(), 0);
         assert!(w.is_empty());
         let a = slicedvec![[1, 2, 3], [4, 5, 6]];

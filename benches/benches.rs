@@ -25,7 +25,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("slicedvec", |b| {
         b.iter(|| {
             for i in 0..500 {
-                x1.overwrite_truncate(i);
+                x1.overwrite_remove(i);
             }
             x1_insert.iter().for_each(|segment| x1.push(segment));
         })
