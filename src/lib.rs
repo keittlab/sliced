@@ -21,7 +21,7 @@
 //!
 //! ```
 //! use rand::{rngs::SmallRng, Rng, SeedableRng};
-//! use slicedvec::SlicedVec;
+//! use sliced::SlicedVec;
 //! let mut rng = SmallRng::from_entropy();
 //! let mut x1 = SlicedVec::with_capacity(1000, 20);
 //! x1.push_vec(
@@ -84,7 +84,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedVec;
+    /// use sliced::SlicedVec;
     /// let sv = SlicedVec::from_vec(3, (1..=9).collect());
     /// assert_eq!(sv[0], [1, 2, 3]);
     /// ```
@@ -124,7 +124,7 @@ where
     /// # Example
     ///
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
+    /// use sliced::{slicedvec, SlicedVec};
     /// let mut a = slicedvec![[1, 2, 3], [4, 5, 6]];
     /// let mut b = slicedvec![[7, 8, 9], [3, 2, 1]];
     /// a.append(&mut b);
@@ -147,7 +147,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
+    /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2],[3, 4]];
     /// // [1,2][3,4]
     /// sv.insert(0, &[5, 6]);
@@ -178,7 +178,7 @@ where
     /// # Example
     ///
     /// ```
-    /// use slicedvec::*;
+    /// use sliced::*;
     /// let mut a = slicedvec![[1, 2, 3]];
     /// a.push(&[4, 5, 6, 7, 8, 9]); // any multiple of segment length
     /// assert_eq!(a.len(), 3);
@@ -245,7 +245,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
+    /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
     /// let first = sv.swap_remove(0);
     /// assert_eq!(first, vec![1, 2, 3]);
@@ -273,7 +273,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
+    /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
     /// sv.swap_truncate(1);
     /// assert_eq!(sv[1], [7, 8, 9]);
@@ -295,7 +295,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedVec;
+    /// use sliced::SlicedVec;
     /// let mut sv = SlicedVec::<i32>::new(3);
     /// sv.truncate(1);
     /// assert_eq!(sv.len(), 0);
@@ -321,7 +321,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedVec;
+    /// use sliced::SlicedVec;
     /// let mut sv = SlicedVec::from_vec(3, (1..=9).collect());
     /// sv.relocate_insert(0, &[1, 2, 3]);
     /// assert_eq!(sv.first(), sv.last());
@@ -339,7 +339,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
+    /// use sliced::{slicedvec, SlicedVec};
     /// let sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
     /// for slice in sv.iter() {
     ///     assert_eq!(slice.len(), 3);
@@ -354,7 +354,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{slicedvec, SlicedVec};
+    /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
     /// sv.iter_mut().for_each(|slice| slice.swap(0, 2));
     /// assert_eq!(sv[0], [3, 2, 1]);
@@ -454,7 +454,7 @@ where
 /// # Example
 ///
 /// ```
-/// use slicedvec::{slicedvec, SlicedVec};
+/// use sliced::{slicedvec, SlicedVec};
 /// let x = slicedvec![[1, 2, 3], [4, 5, 6]];
 /// assert_eq!(x.get(0), Some([1, 2, 3].as_slice()));
 /// assert_eq!(x.get(2), None);
@@ -507,13 +507,23 @@ where
             open_slots: BTreeSet::new(),
         }
     }
+    /// Initialize a `SlicedVec` and set the capacity and segment size.
+    ///
+    /// Panics if `segment_len` is zero.
+    pub fn with_capacity(size: usize, segment_len: usize) -> Self {
+        assert_ne!(segment_len, 0);
+        Self {
+            slots: SlicedVec::with_capacity(size, segment_len),
+            open_slots: BTreeSet::new(),
+        }
+    }
     /// Initialize a `SlicedSlab` and set the capacity and segment size.
     ///
     /// Panics if `segment_len` is zero.
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedSlab;
+    /// use sliced::SlicedSlab;
     /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
     /// ss.release(1);
     /// assert_eq!(ss.get_keys(), vec![0, 2]);
@@ -529,7 +539,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::{SlicedVec, SlicedSlab};
+    /// use sliced::{SlicedVec, SlicedSlab};
     /// let mut sv = SlicedVec::new(3);
     /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
     /// ss.release(1);
@@ -574,7 +584,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedSlab;
+    /// use sliced::SlicedSlab;
     /// let mut ss = SlicedSlab::new(3);
     /// assert_eq!(ss.insert_vec((1..=3).collect()), 0);
     /// ```
@@ -594,7 +604,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedSlab;
+    /// use sliced::SlicedSlab;
     /// let mut ss = SlicedSlab::new(3);
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
@@ -608,7 +618,7 @@ where
     pub fn rekey(&mut self, oldkey: usize) -> usize {
         debug_assert!(oldkey < self.slots.len());
         if self.open_slots.first() < Some(&oldkey) {
-            match self.open_slots.pop_first() {
+            match self.acquire() {
                 Some(newkey) => {
                     self.release(oldkey);
                     debug_assert!(newkey < self.slots.len());
@@ -637,7 +647,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedSlab;
+    /// use sliced::SlicedSlab;
     /// let mut ss = SlicedSlab::new(3);
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
@@ -709,6 +719,26 @@ where
         assert!(self.open_slots.insert(key));
         debug_assert!(self.open_slots.len() <= self.slots.len());
     }
+    /// Acquire a previously released slot.
+    /// 
+    /// This allows one to directly update
+    /// the internal storage. Returns `None`
+    /// if there are no open slots.
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::SlicedSlab;
+    /// let mut ss = SlicedSlab::from_vec(2, (1..=8).collect());
+    /// assert_eq!(ss.acquire(), None);
+    /// ss.release(2);
+    /// let key = ss.acquire().expect("No empty slots!");
+    /// assert_eq!(key, 2);
+    /// ss[key].iter_mut().for_each(|value| *value = 0);
+    /// assert_eq!(ss[key], [0, 0]);
+    /// ```
+    pub fn acquire(&mut self) -> Option<usize> {
+        self.open_slots.pop_first()
+    }
     /// Get a reference to a segment.
     ///
     /// Returns `None` if `key` is out of range
@@ -739,7 +769,7 @@ where
     ///
     /// # Example
     /// ```
-    /// use slicedvec::SlicedSlab;
+    /// use sliced::SlicedSlab;
     /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
     /// ss.release(1);
     /// let s: usize = ss.enumerate()
@@ -764,7 +794,7 @@ where
 ///
 /// # Example
 /// ```
-/// use slicedvec::SlicedSlab;
+/// use sliced::SlicedSlab;
 /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
 /// ss.release(1);
 /// assert_eq!(ss[1], [4, 5, 6]);
@@ -790,7 +820,7 @@ where
 /// Panics if `index` is out of range.
 /// # Example
 /// ```
-/// use slicedvec::SlicedSlab;
+/// use sliced::SlicedSlab;
 /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
 /// ss.release(1);
 /// ss[1][1] = 0;

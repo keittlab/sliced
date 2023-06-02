@@ -1,6 +1,8 @@
+use std::ops::Div;
+
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{rngs::SmallRng, Rng, SeedableRng};
-use slicedvec::SlicedVec;
+use rand::{distributions::Standard, rngs::SmallRng, Rng, SeedableRng};
+use sliced::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = SmallRng::from_entropy();
@@ -27,9 +29,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             for i in 0..500 {
                 x1.swap_truncate(i);
             }
-            x1_insert
-                .iter()
-                .for_each(|segment| x1.push(segment));
+            x1_insert.iter().for_each(|segment| x1.push(segment));
         })
     });
     c.bench_function("vec_of_vec", |b| {
