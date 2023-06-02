@@ -254,14 +254,29 @@ where
     pub fn swap_remove(&mut self, index: usize) -> Vec<T> {
         assert!(index < self.len());
         if index != self.last_index() {
-            self.storage_range(index)
-                .zip(self.storage_range_last())
-                .for_each(|(i, j)| self.storage.swap(i, j))
+            self.swap(index, self.last_index());
+
         }
         self.storage
             .drain(self.storage_range_last())
             .as_slice()
             .into()
+    }
+    /// Swap the contents of two segments.
+    ///
+    /// # Example
+    /// ```
+    /// use sliced::{slicedvec, SlicedVec};
+    /// let mut sv = slicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
+    /// sv.swap(0, 2);
+    /// assert_eq!(sv[0], [7, 8, 9]);
+    /// assert_eq!(sv[1], [4, 5, 6]);
+    /// assert_eq!(sv[2], [1, 2, 3]);
+    /// ```
+    pub fn swap(&mut self, i: usize, j: usize) {
+        self.storage_range(i)
+            .zip(self.storage_range(j))
+            .for_each(|(a, b)| self.storage.swap(a, b))
     }
     /// Swap a segment and truncate its storage.
     ///
@@ -536,6 +551,8 @@ where
         }
     }
     /// Iterate over active keys.
+    /// 
+    /// This will be slow if the slab is sparse.
     ///
     /// # Example
     /// ```
@@ -550,6 +567,8 @@ where
         (0..self.slots.len()).filter(|key| !self.open_slots.contains(key))
     }
     /// Get active keys.
+    /// 
+    /// This will be slow if the slab is sparse.
     pub fn get_keys(&self) -> Vec<usize> {
         self.iter_keys().collect()
     }
