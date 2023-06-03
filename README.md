@@ -29,7 +29,7 @@ for _ in 0..100 {
     svec.push_vec(genseq(16, &mut rng));
 }
 // Fast, no-alloc key-based access
-let mut slab = SlicedSlab::new(16);
+let mut slab =  SlicedSlab::with_capacity(16, 100);
 let mut keys = Vec::new();
 svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
 for _ in 0..50 {
@@ -38,11 +38,11 @@ for _ in 0..50 {
 }
 keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
 slab.compact();
-let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 for _ in 0..50 {
     let i = sample_range(svec.len(), &mut rng);
     keys.push(slab.insert(&svec[i]))
 }
+let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 // 4-point Laplace operator on grid
 let rows = 100;
 let cols = 100;

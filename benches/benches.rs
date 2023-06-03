@@ -4,7 +4,7 @@ use sliced::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = SmallRng::from_entropy();
-    let mut x1 = SlicedVec::with_capacity(1000, 20);
+    let mut x1 = SlicedVec::with_capacity(20, 1000);
     x1.push_vec(
         std::iter::repeat_with(|| rng.gen())
             .take(20 * 1000)

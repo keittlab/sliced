@@ -29,7 +29,7 @@
 //!     svec.push_vec(genseq(16, &mut rng));
 //! }
 //! // Fast, no-alloc key-based access
-//! let mut slab = SlicedSlab::new(16);
+//! let mut slab = SlicedSlab::with_capacity(16, 100);
 //! let mut keys = Vec::new();
 //! svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
 //! for _ in 0..50 {
@@ -38,11 +38,11 @@
 //! }
 //! keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
 //! slab.compact();
-//! let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 //! for _ in 0..50 {
 //!     let i = sample_range(svec.len(), &mut rng);
 //!     keys.push(slab.insert(&svec[i]))
 //! }
+//! let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 //! // 4-point Laplace operator on grid
 //! let rows = 100;
 //! let cols = 100;
@@ -101,12 +101,12 @@ where
     /// # Example
     /// ```
     /// use sliced::SlicedVec;
-    /// let mut sv = SlicedVec::with_capacity(1000, 10);
+    /// let mut sv = SlicedVec::with_capacity(10, 1000);
     /// sv.push_vec((0..10).collect());
     /// assert_eq!(sv.storage_capacity(), 10000);
     /// assert_eq!(sv.capacity(), 1000);
     /// ```
-    pub fn with_capacity(size: usize, segment_len: usize) -> Self {
+    pub fn with_capacity(segment_len: usize, size: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
             storage: Vec::with_capacity(size * segment_len),
@@ -573,10 +573,10 @@ where
     /// Initialize a `SlicedSlab` and set the capacity and segment size.
     ///
     /// Panics if `segment_len` is zero.
-    pub fn with_capacity(size: usize, segment_len: usize) -> Self {
+    pub fn with_capacity(segment_len: usize, size: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
-            slots: SlicedVec::with_capacity(size, segment_len),
+            slots: SlicedVec::with_capacity(segment_len, size),
             open_slots: BTreeSet::new(),
         }
     }
@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(v.get(0).unwrap(), &[4, 5, 6]);
         v.iter_mut().for_each(|x| x.clone_from_slice(&[7, 8, 9]));
         assert_eq!(v.get(0).unwrap(), &[7, 8, 9]);
-        let mut w: SlicedVec<i32> = SlicedVec::with_capacity(20, 5);
+        let mut w: SlicedVec<i32> = SlicedVec::with_capacity(5, 20);
         w.push(&[1, 2, 3, 4, 5]);
         let x = w.get_mut(0).unwrap();
         assert_eq!(x, &[1, 2, 3, 4, 5]);
