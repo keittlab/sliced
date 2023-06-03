@@ -29,6 +29,8 @@
 //!     let i = keys.swap_remove((&mut rng).gen_range(0..keys.len()));
 //!     slab.release(i);
 //! }
+//! keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
+//! slab.compact();
 //! for _ in 0..50 {
 //!     let i = (&mut rng).gen_range(0..svec.len());
 //!     keys.push(slab.insert(&svec[i]))
