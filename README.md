@@ -33,6 +33,16 @@ for _ in 0..50 {
     let i = (&mut rng).gen_range(0..svec.len());
     keys.push(slab.insert(&svec[i]))
 }
+let rows = 100;
+let cols = 100;
+let data = (&mut rng).sample_iter(StandardNormal).take(rows * cols).collect::<Vec<f32>>();
+let mut rast = SlicedVec::from_vec(cols, data);
+for row in 1..(rows - 1) {
+    for col in 1..(cols - 1) {
+        rast[row][col] = rast[row][col - 1] + rast[row][col + 1] + 
+                         rast[row - 1][col] + rast[row + 1][col]
+    }
+}
 ```
 
 
