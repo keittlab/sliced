@@ -1,13 +1,16 @@
 # [sliced](https://docs.rs/sliced)
 
-Two structs are provided: `SlicedVec` and `SlicedSlab`. `SlicedVec` stores a
-collection of uniformly sized slices in a single vector. The segment length is determined at run-time
-during initialization. Methods are available for constant-time, non-order-preserving insertion and deletion.
-The erase-remove idiom is supported for for segments containing multiple values.
+The motivation for `sliced` to convert `OuterHeap<InnerHeap<T>>` to `UnifiedHeap<T>`, specifically
+replace `Vec<Vec<T>>` with a comfy wrapper `SlicedVec<T>`. The use case is storage
+of uniform- and runtime- sized strings of numbers, typically less than 128 elements in length, with many rounds, possibly in the 10's of millions, of insertions and deletions from the container.
 
-`SlicedSlab` is built on `SlicedVec` and returns stable keys to allocated sequences of values. Methods are
-provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`
-so that new insert occur as close to the beginning of the storage as possible thereby reducing fragmentation.
+Two structs are provided: `SlicedVec` and `SlicedSlab`.
+
+`SlicedVec` stores a
+collection of uniformly sized slices in a single vector. The segment length is determined at run-time
+during initialization. Methods are available for constant-time, non-order-preserving insertion and deletion. The erase-remove idiom is supported on whole inner segments.
+
+`SlicedSlab` is built on `SlicedVec` and returns stable keys to inserted sequences of values. Inserts always occur at the lowest available index for improved locality. Methods are provided for re-keying and compacting the slab if it becomes too sparse. 
 
 # Example
 ```rust
@@ -55,5 +58,11 @@ for row in 1..(rows - 1) {
 }
 ```
 
+# Related crates
 
-  
+* [slab](https://crates.io/crates/slab)
+* [ndarray](https://crates.io/crates/ndarray)
+* [fixed-slice-vec](https://crates.io/crates/fixed-slice-vec)
+* [fixed-vec-deque](https://crates.io/crates/fixed-vec-deque)
+* [bumpalo](https://crates.io/crates/bumpalo)
+

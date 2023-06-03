@@ -15,10 +15,10 @@
 //! use rand_distr::StandardNormal;
 //! use sliced::{SlicedVec, SlicedSlab};
 //! let mut rng = SmallRng::from_entropy();
-//! let mut genseq = |n: usize, rng: &mut SmallRng|
+//! let genseq = |n: usize, rng: &mut SmallRng|
 //!     rng.sample_iter(StandardNormal)
 //!     .take(n).collect::<Vec<f32>>();
-//! let mut sample_range = |upper: usize, rng: &mut SmallRng|
+//! let sample_range = |upper: usize, rng: &mut SmallRng|
 //!     rng.gen_range(0..upper);
 //! // Constant time insertion and deletion in contigous memory
 //! let vals = genseq(1600, &mut rng);
@@ -164,6 +164,10 @@ where
     /// Get the capacity of the underlying storage
     pub fn storage_capacity(&self) -> usize {
         self.storage.capacity()
+    }
+    /// Call `shrink_to_fit` on the storage.
+    pub fn shrink_to_fit(&mut self) {
+        self.storage.shrink_to_fit()
     }
     /// Append the contents of another `SlicedVec`.
     ///
@@ -755,10 +759,14 @@ where
                 debug_assert!(len > 0);
                 len -= 1;
             }
-            self.slots.storage.truncate(len * self.slots.segment_len);
+            self.slots.truncate(len);
             debug_assert!(self.open_slots.len() <= self.slots.len());
-            debug_assert!(self.open_slots.last() < Some(&(self.slots.len())));
+            debug_assert!(self.open_slots.last() < Some(&self.slots.len()));
         }
+    }
+    /// Call `shrink_to_fit` on the storage.
+    pub fn shrink_to_fit(&mut self) {
+        self.slots.shrink_to_fit()
     }
     /// Compute the proportion of open slots.
     ///
