@@ -19,14 +19,14 @@
 //!     rng.sample_iter(StandardNormal)
 //!     .take(n).collect::<Vec<f32>>();
 //! let mut sample_range = |upper: usize, rng: &mut SmallRng|
-//!     rng.gen_range(0..upper);;
+//!     rng.gen_range(0..upper);
 //! // Constant time, no-alloc insertion and deletion
 //! let vals = genseq(1600, &mut rng);
 //! let mut svec = SlicedVec::from_vec(16, vals);
 //! for _ in 0..100 {
 //!     let i = sample_range(svec.len(), &mut rng);
 //!     svec.overwrite_remove(i);
-//!     svec.push_vec(genseq(16, &mut rng));
+//!     svec.push_vec(genseq(16, &mut rng))
 //! }
 //! // Fast, no-alloc key-based access
 //! let mut slab = SlicedSlab::with_capacity(16, 100);
@@ -34,18 +34,18 @@
 //! svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
 //! for _ in 0..50 {
 //!     let i = keys.swap_remove(sample_range(keys.len(), &mut rng));
-//!     slab.release(i);
+//!     slab.release(i)
 //! }
 //! keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
 //! slab.compact();
 //! for _ in 0..50 {
 //!     let i = sample_range(svec.len(), &mut rng);
-//!     keys.push(slab.insert(&svec[i]))
+//!     keys.push(slab.insert(&svec.swap_remove(i)))
 //! }
 //! let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 //! // 4-point Laplace operator on grid
-//! let rows = 100;
-//! let cols = 100;
+//! let rows = 256;
+//! let cols = 128;
 //! let mut rast = SlicedVec::from_vec(cols, genseq(rows * cols, &mut rng));
 //! for row in 1..(rows - 1) {
 //!     for col in 1..(cols - 1) {
