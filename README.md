@@ -40,7 +40,7 @@ let mut rast = SlicedVec::from_vec(cols, data);
 for row in 1..(rows - 1) {
     for col in 1..(cols - 1) {
         rast[row][col] = rast[row][col - 1] + rast[row][col + 1] + 
-                         rast[row - 1][col] + rast[row + 1][col]
+                         rast[row - 1][col] + rast[row + 1][col] - 4. * rast[row][col]
     }
 }
 ```
