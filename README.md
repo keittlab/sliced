@@ -15,6 +15,7 @@ use rand::{rngs::SmallRng, Rng, SeedableRng, seq::SliceRandom};
 use rand_distr::StandardNormal;
 use sliced::{SlicedVec, SlicedSlab};
 let mut rng = SmallRng::from_entropy();
+// Constant time, no-alloc insertion and deletion
 let vals = (&mut rng).sample_iter(StandardNormal).take(1600).collect::<Vec<f32>>();
 let mut svec = SlicedVec::from_vec(16, vals);
 for _ in 0..100 {
@@ -22,6 +23,7 @@ for _ in 0..100 {
     svec.overwrite_remove(i);
     svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
 }
+// Fast, no-alloc key-based access
 let mut slab = SlicedSlab::new(16);
 let mut keys = Vec::new();
 svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
@@ -31,10 +33,12 @@ for _ in 0..50 {
 }
 keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
 slab.compact();
+let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 for _ in 0..50 {
     let i = (&mut rng).gen_range(0..svec.len());
     keys.push(slab.insert(&svec[i]))
 }
+// 4-point Laplace operator on grid
 let rows = 100;
 let cols = 100;
 let data = (&mut rng).sample_iter(StandardNormal).take(rows * cols).collect::<Vec<f32>>();

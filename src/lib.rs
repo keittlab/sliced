@@ -31,6 +31,7 @@
 //! }
 //! keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
 //! slab.compact();
+//! let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 //! for _ in 0..50 {
 //!     let i = (&mut rng).gen_range(0..svec.len());
 //!     keys.push(slab.insert(&svec[i]))
