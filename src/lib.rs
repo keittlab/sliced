@@ -15,13 +15,18 @@
 //! use rand_distr::StandardNormal;
 //! use sliced::{SlicedVec, SlicedSlab};
 //! let mut rng = SmallRng::from_entropy();
-//! let vals = (&mut rng).sample_iter(StandardNormal).take(1600).collect::<Vec<f32>>();
+//! let mut genseq = |n: usize, rng: &mut SmallRng|
+//!     rng.sample_iter(StandardNormal)
+//!     .take(n).collect::<Vec<f32>>();
+//! // Constant time, no-alloc insertion and deletion
+//! let vals = genseq(1600, &mut rng);
 //! let mut svec = SlicedVec::from_vec(16, vals);
 //! for _ in 0..100 {
 //!     let i = (&mut rng).gen_range(0..svec.len());
 //!     svec.overwrite_remove(i);
-//!     svec.push_vec((&mut rng).sample_iter(StandardNormal).take(16).collect::<Vec<f32>>());
+//!     svec.push_vec(genseq(16, &mut rng));
 //! }
+//! // Fast, no-alloc key-based access
 //! let mut slab = SlicedSlab::new(16);
 //! let mut keys = Vec::new();
 //! svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
@@ -36,10 +41,10 @@
 //!     let i = (&mut rng).gen_range(0..svec.len());
 //!     keys.push(slab.insert(&svec[i]))
 //! }
+//! // 4-point Laplace operator on grid
 //! let rows = 100;
 //! let cols = 100;
-//! let data = (&mut rng).sample_iter(StandardNormal).take(rows * cols).collect::<Vec<f32>>();
-//! let mut rast = SlicedVec::from_vec(cols, data);
+//! let mut rast = SlicedVec::from_vec(cols, genseq(rows * cols, &mut rng));
 //! for row in 1..(rows - 1) {
 //!     for col in 1..(cols - 1) {
 //!         rast[row][col] = rast[row][col - 1] + rast[row][col + 1] + 
