@@ -20,7 +20,7 @@
 //!     .take(n).collect::<Vec<f32>>();
 //! let mut sample_range = |upper: usize, rng: &mut SmallRng|
 //!     rng.gen_range(0..upper);
-//! // Constant time, no-alloc insertion and deletion
+//! // Constant time insertion and deletion in contigous memory
 //! let vals = genseq(1600, &mut rng);
 //! let mut svec = SlicedVec::from_vec(16, vals);
 //! for _ in 0..100 {
@@ -28,7 +28,7 @@
 //!     svec.overwrite_remove(i);
 //!     svec.push_vec(genseq(16, &mut rng))
 //! }
-//! // Fast, no-alloc key-based access
+//! // Key-based access in pre-allocated memory
 //! let mut slab = SlicedSlab::with_capacity(16, 100);
 //! let mut keys = Vec::new();
 //! svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
@@ -375,10 +375,7 @@ where
     ///
     /// Appends the contents of the segment at `index`
     /// to the end of the storage and then overwrites
-    /// the segment with the new values. If `index` is
-    /// greater than or equal to `self.len()`, then the
-    /// segments is repeatedly pushed until it fills the
-    /// location given by `index`.
+    /// the segment with the new values.
     ///
     /// Panics if `index` is out of range.
     ///
@@ -580,7 +577,7 @@ where
             open_slots: BTreeSet::new(),
         }
     }
-    /// Initialize a `SlicedSlab` and set the capacity and segment size.
+    /// Initialize a `SlicedSlab` from a vector.
     ///
     /// Panics if `segment_len` is zero.
     ///
