@@ -18,11 +18,13 @@ let mut rng = SmallRng::from_entropy();
 let mut genseq = |n: usize, rng: &mut SmallRng|
     rng.sample_iter(StandardNormal)
     .take(n).collect::<Vec<f32>>();
+let mut sample_range = |upper: usize, rng: &mut SmallRng|
+    rng.gen_range(0..upper);;
 // Constant time, no-alloc insertion and deletion
 let vals = genseq(1600, &mut rng);
 let mut svec = SlicedVec::from_vec(16, vals);
 for _ in 0..100 {
-    let i = (&mut rng).gen_range(0..svec.len());
+    let i = sample_range(svec.len(), &mut rng);
     svec.overwrite_remove(i);
     svec.push_vec(genseq(16, &mut rng));
 }
@@ -31,14 +33,14 @@ let mut slab = SlicedSlab::new(16);
 let mut keys = Vec::new();
 svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
 for _ in 0..50 {
-    let i = keys.swap_remove((&mut rng).gen_range(0..keys.len()));
+    let i = keys.swap_remove(sample_range(keys.len(), &mut rng));
     slab.release(i);
 }
 keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
 slab.compact();
 let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
 for _ in 0..50 {
-    let i = (&mut rng).gen_range(0..svec.len());
+    let i = sample_range(svec.len(), &mut rng);
     keys.push(slab.insert(&svec[i]))
 }
 // 4-point Laplace operator on grid
