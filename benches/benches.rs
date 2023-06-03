@@ -4,19 +4,20 @@ use rand_distr::StandardNormal;
 use sliced::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
+    let segment_length = 32;
     let sample_range = |upper: usize, rng: &mut SmallRng| rng.gen_range(0..upper);
     let mut rng = SmallRng::from_entropy();
     c.bench_function("slicedvec", |b| {
         let mut x1 = SlicedVec::from_vec(
-            20,
+            segment_length,
             std::iter::repeat_with(|| rng.sample(StandardNormal))
-                .take(20 * 1000)
+                .take(segment_length * 1000)
                 .collect::<Vec<f32>>(),
         );
         let x1_insert = SlicedVec::from_vec(
-            20,
+            segment_length,
             std::iter::repeat_with(|| rng.sample(StandardNormal))
-                .take(20 * 1000)
+                .take(segment_length * 1000)
                 .collect::<Vec<f32>>(),
         );
         assert_eq!(x1.len(), 1000);
@@ -35,14 +36,14 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("vec_of_vec", |b| {
         let mut x2 = std::iter::repeat_with(|| {
             std::iter::repeat_with(|| rng.sample(StandardNormal))
-                .take(20)
+                .take(segment_length)
                 .collect::<Vec<f32>>()
         })
         .take(1000)
         .collect::<Vec<Vec<f32>>>();
         let x2_insert = std::iter::repeat_with(|| {
             std::iter::repeat_with(|| rng.sample(StandardNormal))
-                .take(20)
+                .take(segment_length)
                 .collect::<Vec<f32>>()
         })
         .take(1000)
@@ -62,15 +63,15 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     c.bench_function("slicedslab", |b| {
         let mut x3 = SlicedSlab::from_vec(
-            20,
+            segment_length,
             std::iter::repeat_with(|| rng.sample(StandardNormal))
-                .take(20 * 1000)
+                .take(segment_length * 1000)
                 .collect::<Vec<f32>>(),
         );
         let x3_insert = SlicedVec::from_vec(
-            20,
+            segment_length,
             std::iter::repeat_with(|| rng.sample(StandardNormal))
-                .take(20 * 1000)
+                .take(segment_length * 1000)
                 .collect::<Vec<f32>>(),
         );
         assert_eq!(x3.get_keys().len(), 1000);
