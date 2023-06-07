@@ -44,6 +44,33 @@ where
             extents: vec![0],
         }
     }
+    /// Append the contents of another `VarSlicedVec`.
+    ///
+    /// `other` is drained after call.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sliced::*;
+    /// let mut a = varslicedvec![[1, 2], [3], [4, 5, 6]];
+    /// let mut b = varslicedvec![[7], [8, 9], [3, 2, 1]];
+    /// a.append(&mut b);
+    /// assert_eq!(a.len(), 6);
+    /// assert_eq!(b.len(), 0);
+    /// assert_eq!(a.lengths(), vec![2, 1, 3, 1, 2, 3]);
+    /// let mut c = VarSlicedVec::new();
+    /// a.append(&mut c);
+    /// assert_eq!(a.len(), 6);
+    /// assert_eq!(a.lengths(), vec![2, 1, 3, 1, 2, 3]);
+    /// ```
+    pub fn append(&mut self, other: &mut Self) {
+        other
+            .lengths()
+            .iter()
+            .for_each(|length| self.extents.push(self.last_extent() + length));
+        other.extents.truncate(1);
+        self.storage.append(&mut other.storage);
+    }
     /// Add a segments to the end.
     ///
     /// Complexity is amortized the segment size.
@@ -57,15 +84,20 @@ where
     /// vv.push(&[4, 5]);
     /// assert_eq!(vv[0], [1, 2, 3]);
     /// assert_eq!(vv[1], [4, 5]);
+    /// vv.push(&[]);
+    /// assert_eq!(vv.len(), 3);
+    /// assert_eq!(vv[2], []);
+    /// vv.push(&[1]);
+    /// assert_eq!(vv.len(), 4);
+    /// assert_eq!(vv[2], []);
+    /// assert_eq!(vv[3], [1]);
+    /// assert_eq!(vv.pop().unwrap(), [1]);
+    /// assert_eq!(vv.pop().unwrap(), [])
     /// ```
     ///
     pub fn push(&mut self, segment: &[T]) {
-        debug_assert!(!self.extents.is_empty());
-        debug_assert_eq!(self.extents.last(), Some(&self.storage.len()));
-        self.extents
-            .push(self.extents[self.extents.len() - 1] + segment.len());
-        self.storage.extend_from_slice(segment);
-        debug_assert_eq!(self.extents.last(), Some(&self.storage.len()));
+            self.extents.push(self.last_extent() + segment.len());
+            self.storage.extend_from_slice(segment);
     }
     /// Add one or more segments contained in a `Vec`.
     ///
@@ -95,9 +127,10 @@ where
     /// ```
     /// use sliced::*;
     /// let mut vv = varslicedvec![[1, 2, 3], [4, 5, 6, 7, 8, 9]];
-    /// let last = vv.pop();
-    /// assert_eq!(last, Some(vec![4, 5, 6, 7, 8, 9]));
+    /// assert_eq!(vv.pop(), Some(vec![4, 5, 6, 7, 8, 9]));
     /// assert_eq!(vv.len(), 1);
+    /// assert_eq!(vv.pop(), Some(vec![1, 2, 3]));
+    /// assert_eq!(vv.pop(), None);
     /// ```
     pub fn pop(&mut self) -> Option<Vec<T>> {
         if self.is_empty() {
@@ -115,6 +148,7 @@ where
     pub fn get(&self, index: usize) -> Option<&[T]> {
         if index < self.len() {
             let range = self.storage_range(index);
+            // Safety: index range is checked
             unsafe { Some(self.storage.get_unchecked(range)) }
         } else {
             None
@@ -126,6 +160,7 @@ where
     pub fn get_mut(&mut self, index: usize) -> Option<&mut [T]> {
         if index < self.len() {
             let range = self.storage_range(index);
+            // Safety: index range is checked
             unsafe { Some(self.storage.get_unchecked_mut(range)) }
         } else {
             None
@@ -172,7 +207,19 @@ where
             0
         }
     }
-    /// Returns the number of internal segments
+    /// Return a vector of segment lengths
+    ///
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let vv = varslicedvec![[1, 2], [3, 4, 5, 6]];
+    /// assert_eq!(vv.lengths(), vec![2, 4]);
+    /// ```
+    pub fn lengths(&self) -> Vec<usize> {
+        self.extents.windows(2).map(|x| x[1] - x[0]).collect()
+    }
+    /// Returns the number of internal segments.
+    /// 
     /// # Example
     /// ```
     /// use sliced::VarSlicedVec;
@@ -197,8 +244,14 @@ where
     fn storage_range(&self, index: usize) -> Range<usize> {
         self.extents[index]..self.extents[index + 1]
     }
+    /// Get last extent
+    fn last_extent(&self) -> usize {
+        let i = self.extents.len() - 1;
+        // Safety: extents is never empty
+        unsafe { *self.extents.get_unchecked(i) }
+    }
     /// Return iterator over slices
-    /// 
+    ///
     /// # Example
     /// ```
     /// use sliced::*;
@@ -209,11 +262,8 @@ where
     /// let lens = vv.iter().map(|slice| slice.len()).collect::<Vec<usize>>();
     /// assert_eq!(lens, vec![1, 2, 3, 2, 1]);
     /// ```
-    pub fn iter(&self) -> VarSlicedVecIter<T>  {
-        VarSlicedVecIter {
-            data: self,
-            i: 0,
-        }
+    pub fn iter(&self) -> VarSlicedVecIter<T> {
+        VarSlicedVecIter { data: self, i: 0 }
     }
 }
 
@@ -224,7 +274,8 @@ where
     type Output = [T];
     fn index(&self, index: usize) -> &Self::Output {
         let range = self.storage_range(index);
-        &self.storage[range]
+        // Safety: above will panic if out of range
+        unsafe { self.storage.get_unchecked(range) }
     }
 }
 
@@ -234,7 +285,8 @@ where
 {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let range = self.storage_range(index);
-        &mut self.storage[range]
+        // Safety: above will panic if out of range
+        unsafe { self.storage.get_unchecked_mut(range) }
     }
 }
 
@@ -248,21 +300,24 @@ where
 }
 
 /// Iterator over slices
-pub struct VarSlicedVecIter<'a, T> 
-where T: Copy + Clone
+pub struct VarSlicedVecIter<'a, T>
+where
+    T: Copy + Clone,
 {
     data: &'a VarSlicedVec<T>,
     i: usize,
 }
 
 impl<'a, T> Iterator for VarSlicedVecIter<'a, T>
-where T: Copy + Clone
+where
+    T: Copy + Clone,
 {
-    type Item = &'a[T];
+    type Item = &'a [T];
     fn next(&mut self) -> Option<Self::Item> {
         if self.i < self.data.len() {
             let range = self.data.storage_range(self.i);
             self.i += 1;
+            // Safety: i cannot be out of range
             unsafe { Some(self.data.storage.get_unchecked(range)) }
         } else {
             None
@@ -272,7 +327,7 @@ where T: Copy + Clone
 
 /*
 /// Iterator over slices
-pub struct VarSlicedVecIterMut<'a, T> 
+pub struct VarSlicedVecIterMut<'a, T>
 where T: Copy + Clone
 {
     data: &'a mut VarSlicedVec<T>,
@@ -287,7 +342,7 @@ where T: Copy + Clone
         if self.i < self.data.len() {
             let range = self.data.storage_range(self.i);
             self.i += 1;
-            unsafe { let ret = self.data.storage.get_unchecked_mut(range); 
+            unsafe { let ret = self.data.storage.get_unchecked_mut(range);
             Some(&'a mut *ret) }
         } else {
             None
