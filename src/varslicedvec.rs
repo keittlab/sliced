@@ -96,8 +96,8 @@ where
     /// ```
     ///
     pub fn push(&mut self, segment: &[T]) {
-            self.extents.push(self.last_extent() + segment.len());
-            self.storage.extend_from_slice(segment);
+        self.extents.push(self.last_extent() + segment.len());
+        self.storage.extend_from_slice(segment);
     }
     /// Add one or more segments contained in a `Vec`.
     ///
@@ -140,6 +140,32 @@ where
             self.extents.pop();
             debug_assert!(!self.extents.is_empty());
             Some(self.storage.drain(range).as_slice().into())
+        }
+    }
+    /// Split container into twp parts
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let mut vv1 = varslicedvec![[1], [2, 3], [4, 5, 6]];
+    /// let vv2 = vv1.split_off(1);
+    /// assert_eq!(vv1[0], [1]);
+    /// assert_eq!(vv1.lengths(), vec![1]);
+    /// assert_eq!(vv2[0], [2, 3]);
+    /// assert_eq!(vv2.lengths(), vec![2, 3]);
+    /// ```
+    pub fn split_off(&mut self, at: usize) -> Self {
+        Self {
+            storage: self.storage.split_off(self.storage_begin(at)),
+            extents: [0]
+                .into_iter()
+                .chain(
+                    self.extents
+                        .split_off(at + 1)
+                        .into_iter()
+                        .map(|extent| extent - self.storage_begin(at)),
+                )
+                .collect::<Vec<usize>>(),
         }
     }
     /// Get a reference to a segment.
@@ -219,7 +245,7 @@ where
         self.extents.windows(2).map(|x| x[1] - x[0]).collect()
     }
     /// Returns the number of internal segments.
-    /// 
+    ///
     /// # Example
     /// ```
     /// use sliced::VarSlicedVec;
@@ -242,7 +268,15 @@ where
     }
     /// Get storage range of index
     fn storage_range(&self, index: usize) -> Range<usize> {
-        self.extents[index]..self.extents[index + 1]
+        self.storage_begin(index)..self.storage_end(index)
+    }
+    /// Get start of segment storage
+    fn storage_begin(&self, index: usize) -> usize {
+        self.extents[index]
+    }
+    /// Get end of segment storage
+    fn storage_end(&self, index: usize) -> usize {
+        self.extents[index + 1]
     }
     /// Get last extent
     fn last_extent(&self) -> usize {
