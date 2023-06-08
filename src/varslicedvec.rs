@@ -70,6 +70,8 @@ where
             .for_each(|length| self.extents.push(self.last_extent() + length));
         other.extents.truncate(1);
         self.storage.append(&mut other.storage);
+        debug_assert!(self.check_invariants());
+        debug_assert!(other.check_invariants());
     }
     /// Add a segments to the end.
     ///
@@ -98,6 +100,7 @@ where
     pub fn push(&mut self, segment: &[T]) {
         self.extents.push(self.last_extent() + segment.len());
         self.storage.extend_from_slice(segment);
+        debug_assert!(self.check_invariants());
     }
     /// Add one or more segments contained in a `Vec`.
     ///
@@ -138,12 +141,11 @@ where
         } else {
             let range = self.storage_range(self.len() - 1);
             self.extents.pop();
-            debug_assert!(!self.extents.is_empty());
             Some(self.storage.drain(range).as_slice().into())
         }
     }
     /// Split container into twp parts
-    /// 
+    ///
     /// # Example
     /// ```
     /// use sliced::*;
@@ -155,6 +157,7 @@ where
     /// assert_eq!(vv2.lengths(), vec![2, 3]);
     /// ```
     pub fn split_off(&mut self, at: usize) -> Self {
+        debug_assert!(self.check_invariants());
         Self {
             storage: self.storage.split_off(self.storage_begin(at)),
             extents: [0]
@@ -169,7 +172,7 @@ where
         }
     }
     /// Insert a segment into the container
-    /// 
+    ///
     /// # Example
     /// ```
     /// use sliced::*;
@@ -184,15 +187,29 @@ where
         let mut back = self.split_off(at);
         self.push(segment);
         self.append(&mut back);
+        debug_assert!(self.check_invariants());
     }
     /// Get a reference to a segment.
     ///
     /// Returns `None` if `index` is out of range.
+    ///
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let vv = varslicedvec![[1, 2, 3], [4, 5], [6]];
+    /// assert_eq!(vv.get(0), Some([1, 2, 3].as_slice()));
+    /// assert_eq!(vv.get(1), Some([4, 5].as_slice()));
+    /// assert_eq!(vv.get(2), Some([6].as_slice()));
+    /// assert_eq!(vv.get(3), None);
+    /// ```
     pub fn get(&self, index: usize) -> Option<&[T]> {
+        debug_assert!(self.check_invariants());
         if index < self.len() {
-            let range = self.storage_range(index);
             // Safety: index range is checked
-            unsafe { Some(self.storage.get_unchecked(range)) }
+            unsafe {
+                let range = self.storage_range_unchecked(index);
+                Some(self.storage.get_unchecked(range))
+            }
         } else {
             None
         }
@@ -201,10 +218,13 @@ where
     ///
     /// Returns `None` if `index` is out of range.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut [T]> {
+        debug_assert!(self.check_invariants());
         if index < self.len() {
-            let range = self.storage_range(index);
             // Safety: index range is checked
-            unsafe { Some(self.storage.get_unchecked_mut(range)) }
+            unsafe {
+                let range = self.storage_range_unchecked(index);
+                Some(self.storage.get_unchecked_mut(range))
+            }
         } else {
             None
         }
@@ -295,11 +315,46 @@ where
     fn storage_end(&self, index: usize) -> usize {
         self.extents[index + 1]
     }
+    /// Get storage range of index
+    unsafe fn storage_range_unchecked(&self, index: usize) -> Range<usize> {
+        debug_assert!(self.check_invariants());
+        self.storage_begin(index)..self.storage_end(index)
+    }
+    /// Get start of segment storage
+    unsafe fn storage_begin_unchecked(&self, index: usize) -> &usize {
+        debug_assert!(self.check_invariants());
+        self.extents.get_unchecked(index)
+    }
+    /// Get end of segment storage
+    unsafe fn storage_end_unchecked(&self, index: usize) -> &usize {
+        debug_assert!(self.check_invariants());
+        self.extents.get_unchecked(index + 1)
+    }
     /// Get last extent
     fn last_extent(&self) -> usize {
+        debug_assert!(!self.extents.is_empty());
         let i = self.extents.len() - 1;
         // Safety: extents is never empty
         unsafe { *self.extents.get_unchecked(i) }
+    }
+    /// Debugging sanity check
+    fn check_invariants(&self) -> bool {
+        (!self.extents.is_empty())
+            && self.extents[0] == 0
+            && self.extents.last().unwrap() == &self.storage.len()
+            && self.extents_are_monotonic()
+    }
+    /// Extents must not decrease
+    fn extents_are_monotonic(&self) -> bool {
+        if self.extents.len() > 1 {
+            self
+            .extents
+            .windows(2)
+            .map(|x| x[1] >= x[0])
+            .fold(true, |aggr, cond| aggr & cond)
+        } else {
+            true
+        } 
     }
     /// Return iterator over slices
     ///
@@ -365,6 +420,7 @@ where
 {
     type Item = &'a [T];
     fn next(&mut self) -> Option<Self::Item> {
+        debug_assert!(self.data.check_invariants());
         if self.i < self.data.len() {
             let range = self.data.storage_range(self.i);
             self.i += 1;
