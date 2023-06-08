@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut, Range};
 
-/// A segmented vector with variable length segments
+/// A segmented vector with variable length segments.
 #[derive(Debug)]
 pub struct VarSlicedVec<T>
 where
@@ -144,7 +144,7 @@ where
             Some(self.storage.drain(range).as_slice().into())
         }
     }
-    /// Split container into twp parts
+    /// Split container into twp parts.
     ///
     /// # Example
     /// ```
@@ -171,7 +171,7 @@ where
                 .collect::<Vec<usize>>(),
         }
     }
-    /// Insert a segment into the container
+    /// Insert a segment into the container.
     ///
     /// # Example
     /// ```
@@ -253,7 +253,7 @@ where
     pub fn last_mut(&mut self) -> Option<&mut [T]> {
         self.get_mut(self.len() - 1)
     }
-    /// Get the segment length at `index`
+    /// Get the segment length at `index`.
     ///
     /// # Example
     /// ```
@@ -270,7 +270,7 @@ where
             0
         }
     }
-    /// Return a vector of segment lengths
+    /// Return a vector of segment lengths.
     ///
     /// # Example
     /// ```
@@ -299,7 +299,7 @@ where
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    /// Get the capacity of the underlying storage
+    /// Get the capacity of the underlying storage.
     pub fn storage_capacity(&self) -> usize {
         self.storage.capacity()
     }
@@ -307,28 +307,28 @@ where
     fn storage_range(&self, index: usize) -> Range<usize> {
         self.storage_begin(index)..self.storage_end(index)
     }
-    /// Get start of segment storage
+    /// Get start of segment storage.
     fn storage_begin(&self, index: usize) -> usize {
         self.extents[index]
     }
-    /// Get end of segment storage
+    /// Get end of segment storage.
     fn storage_end(&self, index: usize) -> usize {
         self.extents[index + 1]
     }
-    /// Get storage range of index
+    /// Get storage range of index.
     unsafe fn storage_range_unchecked(&self, index: usize) -> Range<usize> {
         debug_assert!(self.check_invariants());
-        self.storage_begin(index)..self.storage_end(index)
+        self.storage_begin_unchecked(index)..self.storage_end_unchecked(index)
     }
-    /// Get start of segment storage
-    unsafe fn storage_begin_unchecked(&self, index: usize) -> &usize {
+    /// Get start of segment storage.
+    unsafe fn storage_begin_unchecked(&self, index: usize) -> usize {
         debug_assert!(self.check_invariants());
-        self.extents.get_unchecked(index)
+        *self.extents.get_unchecked(index)
     }
-    /// Get end of segment storage
-    unsafe fn storage_end_unchecked(&self, index: usize) -> &usize {
+    /// Get end of segment storage.
+    unsafe fn storage_end_unchecked(&self, index: usize) -> usize {
         debug_assert!(self.check_invariants());
-        self.extents.get_unchecked(index + 1)
+        *self.extents.get_unchecked(index + 1)
     }
     /// Get last extent
     fn last_extent(&self) -> usize {
