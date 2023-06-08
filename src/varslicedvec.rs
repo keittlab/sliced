@@ -168,6 +168,23 @@ where
                 .collect::<Vec<usize>>(),
         }
     }
+    /// Insert a segment into the container
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let mut vv = varslicedvec![[1], [2, 3]];
+    /// vv.insert(0, &[0]);
+    /// assert_eq!(vv[0], [0]);
+    /// vv.insert(2, &[4]);
+    /// assert_eq!(vv[2], [4]);
+    /// assert_eq!(vv[3], [2, 3]);
+    /// ```
+    pub fn insert(&mut self, at: usize, segment: &[T]) {
+        let mut back = self.split_off(at);
+        self.push(segment);
+        self.append(&mut back);
+    }
     /// Get a reference to a segment.
     ///
     /// Returns `None` if `index` is out of range.
