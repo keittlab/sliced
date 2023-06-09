@@ -189,6 +189,26 @@ where
         self.append(&mut back);
         debug_assert!(self.check_invariants());
     }
+    /// Remove and return a segment
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let mut vv = varslicedvec![[1], [2, 3], [4, 5, 6]];
+    /// assert_eq!(vv.remove(1), [2, 3]);
+    /// assert_eq!(vv[1], [4, 5, 6]);
+    /// ```
+    pub fn remove(&mut self, index: usize) -> Vec<T> {
+        assert!(index < self.len());
+        if index == self.len() - 1 {
+            self.pop().unwrap()
+        } else {
+            let mut back = self.split_off(index + 1);
+            let segment = self.pop();
+            self.append(&mut back);
+            segment.unwrap()
+        }
+    }
     /// Get a reference to a segment.
     ///
     /// Returns `None` if `index` is out of range.
@@ -294,6 +314,12 @@ where
     /// ```
     pub fn len(&self) -> usize {
         self.extents.len() - 1
+    }
+    /// Clear the contents
+    pub fn clear(&mut self) {
+        self.storage.clear();
+        self.extents.truncate(1);
+        debug_assert!(self.check_invariants());
     }
     /// Test if length is zero.
     pub fn is_empty(&self) -> bool {
