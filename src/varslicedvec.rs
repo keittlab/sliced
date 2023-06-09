@@ -66,7 +66,7 @@ where
     pub fn append(&mut self, other: &mut Self) {
         other
             .lengths()
-            .iter()
+            .into_iter()
             .for_each(|length| self.extents.push(self.last_extent() + length));
         other.extents.truncate(1);
         self.storage.append(&mut other.storage);
@@ -139,10 +139,17 @@ where
         if self.is_empty() {
             None
         } else {
-            let range = self.storage_range(self.len() - 1);
-            self.extents.pop();
-            Some(self.storage.drain(range).as_slice().into())
+            // Safety: self is not empty
+            unsafe { Some(self.pop_unchecked()) }
         }
+    }
+    // Caller ensures self is non-empty
+    unsafe fn pop_unchecked(&mut self) -> Vec<T> {
+        debug_assert!(self.check_invariants());
+        let newlen = self.len() - 1;
+        let range = self.storage_range_unchecked(newlen);
+        self.extents.truncate(newlen + 1);
+        self.storage.drain(range).as_slice().into()
     }
     /// Split container into twp parts.
     ///
@@ -190,7 +197,7 @@ where
         debug_assert!(self.check_invariants());
     }
     /// Remove and return a segment
-    /// 
+    ///
     /// # Example
     /// ```
     /// use sliced::*;
@@ -200,13 +207,16 @@ where
     /// ```
     pub fn remove(&mut self, index: usize) -> Vec<T> {
         assert!(index < self.len());
-        if index == self.len() - 1 {
-            self.pop().unwrap()
-        } else {
-            let mut back = self.split_off(index + 1);
-            let segment = self.pop();
-            self.append(&mut back);
-            segment.unwrap()
+        // Safety: index is in range
+        unsafe {
+            if index == self.len() - 1 {
+                self.pop_unchecked()
+            } else {
+                let mut back = self.split_off(index + 1);
+                let segment = self.pop_unchecked();
+                self.append(&mut back);
+                segment
+            }
         }
     }
     /// Get a reference to a segment.
@@ -373,14 +383,13 @@ where
     /// Extents must not decrease
     fn extents_are_monotonic(&self) -> bool {
         if self.extents.len() > 1 {
-            self
-            .extents
-            .windows(2)
-            .map(|x| x[1] >= x[0])
-            .fold(true, |aggr, cond| aggr & cond)
+            self.extents
+                .windows(2)
+                .map(|x| x[1] >= x[0])
+                .fold(true, |aggr, cond| aggr & cond)
         } else {
             true
-        } 
+        }
     }
     /// Return iterator over slices
     ///
@@ -405,9 +414,12 @@ where
 {
     type Output = [T];
     fn index(&self, index: usize) -> &Self::Output {
-        let range = self.storage_range(index);
-        // Safety: above will panic if out of range
-        unsafe { self.storage.get_unchecked(range) }
+        assert!(index < self.len());
+        // Safety: range is checked
+        unsafe {
+            let range = self.storage_range_unchecked(index);
+            self.storage.get_unchecked(range)
+        }
     }
 }
 
@@ -416,9 +428,12 @@ where
     T: Copy + Clone,
 {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let range = self.storage_range(index);
-        // Safety: above will panic if out of range
-        unsafe { self.storage.get_unchecked_mut(range) }
+        assert!(index < self.len());
+        // Safety: range is checked
+        unsafe {
+            let range = self.storage_range_unchecked(index);
+            self.storage.get_unchecked_mut(range)
+        }
     }
 }
 
@@ -448,10 +463,12 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         debug_assert!(self.data.check_invariants());
         if self.i < self.data.len() {
-            let range = self.data.storage_range(self.i);
-            self.i += 1;
             // Safety: i cannot be out of range
-            unsafe { Some(self.data.storage.get_unchecked(range)) }
+            unsafe {
+                let range = self.data.storage_range_unchecked(self.i);
+                self.i += 1;
+                Some(self.data.storage.get_unchecked(range))
+            }
         } else {
             None
         }
