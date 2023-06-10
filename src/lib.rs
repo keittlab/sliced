@@ -1,58 +1,45 @@
 #![allow(dead_code)]
-//! Two structs are provided: `SlicedVec` and `SlicedSlab`. `SlicedVec` stores a
-//! collection of uniformly sized slices in a single vector. The segment length is determined at run-time
-//! during initialization. Methods are available for constant-time, non-order-preserving insertion and deletion.
-//! The erase-remove idiom is supported for for segments containing multiple values.
-//!
-//! `SlicedSlab` is built on `SlicedVec` and returns stable keys to allocated sequences of values. Methods are
-//! provided for re-keying and compacting the slab if it becomes too sparse. Open slots are stored in a `BTreeSet`
-//! so that new insert occur as close to the beginning of the storage as possible thereby reducing fragmentation.
-//!
-//! # Example
-//!
+//! The `sliced` crate is a thin wrapper around `Vec` that returns slices over internal storage rather
+//! than individual elements. It is useful in cases where you need to store and repeatedly manipulate a
+//! large collection of relatively short runs of numbers with the run lengths determined at run-time rather
+//! than during compilation. Using `Vec<Vec<T>>` means that each insert and remove will allocate and deallocate heap
+//! storage for the inner `Vec`, whereas sliced storage will use a single growable buffer.
+//! 
+//! For variable length slices, `VarSlicedVec` stores the sequences in a single `Vec` along with their extents, similar
+//! to a compressed sparse row graph layout.
 //! ```
-//! use rand::{rngs::SmallRng, Rng, SeedableRng, seq::SliceRandom};
-//! use rand_distr::StandardNormal;
-//! use sliced::{SlicedVec, SlicedSlab};
-//! let mut rng = SmallRng::from_entropy();
-//! let genseq = |n: usize, rng: &mut SmallRng|
-//!     rng.sample_iter(StandardNormal)
-//!     .take(n).collect::<Vec<f32>>();
-//! let sample_range = |upper: usize, rng: &mut SmallRng|
-//!     rng.gen_range(0..upper);
-//! // Constant time insertion and deletion in contigous memory
-//! let vals = genseq(1600, &mut rng);
-//! let mut svec = SlicedVec::from_vec(16, vals);
-//! for _ in 0..100 {
-//!     let i = sample_range(svec.len(), &mut rng);
-//!     svec.overwrite_remove(i);
-//!     svec.push_vec(genseq(16, &mut rng))
-//! }
-//! // Key-based access in pre-allocated memory
-//! let mut slab = SlicedSlab::with_capacity(16, 100);
-//! let mut keys = Vec::new();
-//! svec.iter().for_each(|segment| keys.push(slab.insert(segment)));
-//! for _ in 0..50 {
-//!     let i = keys.swap_remove(sample_range(keys.len(), &mut rng));
-//!     slab.release(i)
-//! }
-//! keys.iter_mut().for_each(|key| *key = slab.rekey(*key));
-//! slab.compact();
-//! for _ in 0..50 {
-//!     let i = sample_range(svec.len(), &mut rng);
-//!     keys.push(slab.insert(&svec.swap_remove(i)))
-//! }
-//! let sum = keys.iter().map(|&key| slab[key].iter().sum::<f32>()).sum::<f32>();
-//! // 4-point Laplace operator on grid
-//! let rows = 256;
-//! let cols = 128;
-//! let mut rast = SlicedVec::from_vec(cols, genseq(rows * cols, &mut rng));
-//! for row in 1..(rows - 1) {
-//!     for col in 1..(cols - 1) {
-//!         rast[row][col] = rast[row][col - 1] + rast[row][col + 1] + 
-//!                          rast[row - 1][col] + rast[row + 1][col] - 4. * rast[row][col]
-//!     }
-//! }
+//! use sliced::*;
+//! let mut vv = VarSlicedVec::new();
+//! vv.push(&[1, 2, 3]);
+//! vv.push(&[4, 5]);
+//! vv.push(&[6]);
+//! assert_eq!(vv.remove(1), [4, 5]);
+//! assert_eq!(vv.pop(), Some(vec![6]));
+//! assert_eq!(vv[0], [1, 2, 3]);
+//! ```
+//! 
+//! For strings of equal length set at run-time, `SlicedVec` allows for constant-time insertion and
+//! removal without extra allocation if there is sufficient spare storage capacity.
+//! ```
+//! use sliced::*;
+//! let mut sv = SlicedVec::new(3);
+//! sv.push(&[1, 2, 3]);
+//! sv.push(&[4, 5, 6]);
+//! sv.push(&[7, 8, 9]);
+//! assert_eq!(sv.swap_remove(1), [4, 5, 6]);
+//! assert_eq!(sv.pop(), Some(vec![7, 8, 9]));
+//! assert_eq!(sv[0], [1, 2, 3]);
+//! ```
+//! 
+//! `SlicedSlab` is also provided for accessing segments using a key.
+//! ```
+//! use sliced::*;
+//! let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
+//! assert_eq!(ss.get_keys(), vec![0, 1, 2]);
+//! assert_eq!(ss[1], [4, 5, 6]);
+//! ss.release(1);
+//! assert_eq!(ss.insert(&[6, 5, 4]), 1);
+//! assert_eq!(ss[1], [6, 5, 4]);
 //! ```
 
 mod slicedvec;

@@ -151,7 +151,7 @@ where
         self.extents.truncate(newlen + 1);
         self.storage.drain(range).as_slice().into()
     }
-    /// Split container into twp parts.
+    /// Split container into two parts.
     ///
     /// # Example
     /// ```
@@ -338,6 +338,10 @@ where
     /// Get the capacity of the underlying storage.
     pub fn storage_capacity(&self) -> usize {
         self.storage.capacity()
+    }
+    /// Shrink the storage to fit data
+    pub fn shring_to_fit(&mut self) {
+        self.storage.shrink_to_fit()
     }
     /// Get storage range of index
     fn storage_range(&self, index: usize) -> Range<usize> {
