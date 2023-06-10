@@ -160,7 +160,7 @@ where
             let dst = self.storage_begin(index + 1);
             self.storage.copy_within(src, dst);
         }
-        // Requires index in bounds
+        // Safety: index is range-checked and segment length is correct
         unsafe { self.overwrite(index, segment) }
     }
     /// Add one or more segments to the end.
@@ -360,7 +360,7 @@ where
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
         self.storage.extend_from_within(self.storage_range(index));
-        // Requires index in bounds
+        // Safety: index range-checked and segment length matches
         unsafe { self.overwrite(index, segment) }
     }
     /// Return a chunked iterator.

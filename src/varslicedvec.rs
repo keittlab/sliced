@@ -466,11 +466,12 @@ where
     type Item = &'a [T];
     fn next(&mut self) -> Option<Self::Item> {
         debug_assert!(self.data.check_invariants());
-        if self.i < self.data.len() {
+        let i = self.i;
+        self.i += 1;
+        if i < self.data.len() {
             // Safety: i cannot be out of range
             unsafe {
-                let range = self.data.storage_range_unchecked(self.i);
-                self.i += 1;
+                let range = self.data.storage_range_unchecked(i);
                 Some(self.data.storage.get_unchecked(range))
             }
         } else {
@@ -516,11 +517,15 @@ where T: Copy + Clone
 /// assert_eq!(x.get(3), None);
 /// assert_eq!(x[1], [3, 4, 5, 6]);
 /// assert_eq!(x.len(), 3);
+/// let mut y = varslicedvec![];
+/// y.push(&[1, 2]);
+/// assert_eq!(y.len(), 1);
 /// ```
 ///
 /// Panics if array lengths do not match.
 #[macro_export]
 macro_rules! varslicedvec {
+    () => { VarSlicedVec::new() };
     ( $first:expr$(, $the_rest:expr )*$(,)? ) => {
         {
             let mut temp_vec = VarSlicedVec::new();
