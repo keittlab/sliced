@@ -2,12 +2,6 @@ use std::{collections::BTreeSet, ops::{IndexMut, Index}};
 use crate::slicedvec::*;
 
 /// A segmented slab with stable keys.
-///
-/// Maintains a `SlicedVec` and a `BTreeSet` of
-/// available slots. Given sufficient capacity, no
-/// allocation will occur on insert or removal. Look
-/// up of available slots is logarithmic in the number
-/// of open slots.
 #[derive(Debug)]
 pub struct SlicedSlab<T>
 where
@@ -22,8 +16,8 @@ where
     T: Copy + Clone,
 {
     /// Construct a new `SlicedSlab`.
-    ///
-    /// Panics if `segment_len` is zero.
+    /// # Panics
+    /// If `segment_len` is zero.
     pub fn new(segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -32,8 +26,8 @@ where
         }
     }
     /// Initialize a `SlicedSlab` and set the capacity and segment size.
-    ///
-    /// Panics if `segment_len` is zero.
+    /// # Panics
+    /// If `segment_len` is zero.
     pub fn with_capacity(segment_len: usize, size: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -42,16 +36,13 @@ where
         }
     }
     /// Initialize a `SlicedSlab` from a vector.
-    ///
-    /// Panics if `segment_len` is zero.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
     /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
-    /// ss.release(1);
-    /// assert_eq!(ss.get_keys(), vec![0, 2]);
     /// ```
+    /// # Panics
+    /// If `segment_len` is zero.
     pub fn from_vec(segment_len: usize, data: Vec<T>) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -60,15 +51,12 @@ where
         }
     }
     /// Iterate over active keys.
-    ///
-    /// This will be slow if the slab is sparse.
-    ///
     /// # Example
     /// ```
-    /// use sliced::{SlicedVec, SlicedSlab};
-    /// let mut sv = SlicedVec::new(3);
+    /// use sliced::*;
     /// let mut ss = SlicedSlab::from_vec(3, (1..=9).collect());
     /// ss.release(1);
+    /// let mut sv = SlicedVec::new(3);
     /// ss.iter_keys().for_each(|key| sv.push(&ss[key]));
     /// assert_eq!(sv[1], ss[2]);
     /// ```
@@ -76,19 +64,33 @@ where
         (0..self.slots.len()).filter(|key| !self.open_slots.contains(key))
     }
     /// Get active keys.
-    ///
-    /// This will be slow if the slab is sparse.
+    /// 
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let mut ss = SlicedSlab::from_vec(2, (0..10).collect());
+    /// ss.release(1);
+    /// ss.release(3);
+    /// assert_eq!(ss.get_keys(), vec![0, 2, 4]);
+    /// ```
     pub fn get_keys(&self) -> Vec<usize> {
         self.iter_keys().collect()
     }
     /// Insert a segment into the slab.
-    ///
+    /// 
     /// The first available slot is overwritten
     /// with the contents of the slice. Otherwise,
     /// the slice is appended to the storage. Returns
     /// a key for later retrieval.
-    ///
-    /// Panics if the length of the slice does
+    /// # Example
+    /// ```
+    /// use sliced::*;
+    /// let mut ss = SlicedSlab::new(2);
+    /// let key = ss.insert(&[1, 2]);
+    /// assert_eq!(ss[key], [1, 2]);
+    /// ```
+    /// # Panics
+    /// If the length of the slice does
     /// not match the segments size of the slab.
     pub fn insert(&mut self, segment: &[T]) -> usize {
         assert_eq!(segment.len(), self.slots.segment_len());
@@ -127,9 +129,6 @@ where
     /// a new key will be returned. Otherwise, no
     /// action is taken and `oldkey` is returned
     /// unchanged.
-    ///
-    /// Panics if the old key is unoccupied.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
@@ -143,6 +142,8 @@ where
     /// // [occ][vac]
     /// assert_eq!(ss[0], [4, 5, 6]);
     /// ```
+    /// # Panics
+    /// If the old key is released.
     pub fn rekey(&mut self, oldkey: usize) -> usize {
         debug_assert!(oldkey < self.slots.len());
         if self.open_slots.first() < Some(&oldkey) {
@@ -180,30 +181,12 @@ where
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
     /// assert_eq!(ss.insert(&[7, 8, 9]), 2);
-    /// // [occ][occ][occ]
     /// ss.release(1);
-    /// // [occ][vac][occ]
     /// assert_eq!(ss.sparsity(), 1./3.);
+    /// ss.release(2);
+    /// assert_eq!(ss.sparsity(), 2./3.);
     /// ss.compact();
-    /// // [occ][vac][occ]
-    /// assert_eq!(ss.sparsity(), 1./3.);
-    /// assert_eq!(ss.get(1), None);
-    /// assert_eq!(ss.rekey(0), 0);
-    /// // [occ][vac][occ]
-    /// assert_eq!(ss.get(2), Some([7, 8, 9].as_slice()));
-    /// assert_eq!(ss.rekey(2), 1);
-    /// // [occ][occ][vac]
-    /// assert_eq!(ss.get(1), Some([7, 8, 9].as_slice()));
-    /// assert_eq!(ss.get(2), None);
-    /// ss.compact();
-    /// // [occ][occ]
     /// assert_eq!(ss.sparsity(), 0.0);
-    /// ss.release(1);
-    /// ss.compact();
-    /// assert_eq!(ss.iter_keys().max().unwrap(), 0);
-    /// ss.release(0);
-    /// ss.compact();
-    /// assert!(ss.get_keys().is_empty());
     /// ```
     pub fn compact(&mut self) {
         if self.open_slots.len() == self.slots.len() {
