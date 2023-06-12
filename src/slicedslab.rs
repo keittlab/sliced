@@ -16,6 +16,7 @@ where
     T: Copy + Clone,
 {
     /// Construct a new `SlicedSlab`.
+    /// 
     /// # Panics
     /// If `segment_len` is zero.
     pub fn new(segment_len: usize) -> Self {
@@ -26,6 +27,7 @@ where
         }
     }
     /// Initialize a `SlicedSlab` and set the capacity and segment size.
+    /// 
     /// # Panics
     /// If `segment_len` is zero.
     pub fn with_capacity(segment_len: usize, size: usize) -> Self {
@@ -36,6 +38,7 @@ where
         }
     }
     /// Initialize a `SlicedSlab` from a vector.
+    /// 
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
@@ -51,6 +54,7 @@ where
         }
     }
     /// Iterate over active keys.
+    /// 
     /// # Example
     /// ```
     /// use sliced::*;
@@ -86,8 +90,12 @@ where
     /// ```
     /// use sliced::*;
     /// let mut ss = SlicedSlab::new(2);
-    /// let key = ss.insert(&[1, 2]);
-    /// assert_eq!(ss[key], [1, 2]);
+    /// let first_key = ss.insert(&[1, 2]);
+    /// assert_eq!(ss[first_key], [1, 2]);
+    /// ss.release(first_key);
+    /// let second_key = ss.insert(&[2, 1]);
+    /// assert_eq!(ss[second_key], [2, 1]);
+    /// assert_eq!(first_key, second_key);
     /// ```
     /// # Panics
     /// If the length of the slice does
@@ -98,7 +106,7 @@ where
             Some(key) => {
                 debug_assert!(key < self.slots.len());
                 unsafe {
-                    // Requires key is in bounds
+                    // Safety: key is in-bounds and segment length is checked
                     self.slots.overwrite(key, segment);
                 }
                 key
@@ -135,15 +143,12 @@ where
     /// let mut ss = SlicedSlab::new(3);
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
-    /// // [occ][occ]
-    /// ss.release(0);
-    /// // [vac][occ]
-    /// assert_eq!(ss.rekey(1), 0);
-    /// // [occ][vac]
+    /// ss.release(0); // [vac][occ]
+    /// assert_eq!(ss.rekey(1), 0); // [occ][vac]
     /// assert_eq!(ss[0], [4, 5, 6]);
     /// ```
     /// # Panics
-    /// If the old key is released.
+    /// If the old key is already marked as available.
     pub fn rekey(&mut self, oldkey: usize) -> usize {
         debug_assert!(oldkey < self.slots.len());
         if self.open_slots.first() < Some(&oldkey) {
@@ -173,7 +178,6 @@ where
     /// be pushed to the end of the storage. Or if all
     /// slots are open, the slab will be empty after
     /// this call.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
@@ -181,11 +185,11 @@ where
     /// assert_eq!(ss.insert(&[1, 2, 3]), 0);
     /// assert_eq!(ss.insert(&[4, 5, 6]), 1);
     /// assert_eq!(ss.insert(&[7, 8, 9]), 2);
-    /// ss.release(1);
+    /// ss.release(1); // [occ][vac][occ]
     /// assert_eq!(ss.sparsity(), 1./3.);
-    /// ss.release(2);
+    /// ss.release(2); // [occ][vac][vac]
     /// assert_eq!(ss.sparsity(), 2./3.);
-    /// ss.compact();
+    /// ss.compact(); // [occ]
     /// assert_eq!(ss.sparsity(), 0.0);
     /// ```
     pub fn compact(&mut self) {
@@ -225,8 +229,8 @@ where
     /// Keys are not globally unique. They will be reused.
     /// Marking the slot unoccupied is logarithmic in the
     /// number of open slots.
-    ///
-    /// Panics of the slot is already marked as open.
+    /// # Panics
+    /// If the slot is already marked as available.
     pub fn release(&mut self, key: usize) {
         assert!(key < self.slots.len());
         // This is the only site where keys are added
@@ -239,7 +243,6 @@ where
     /// This allows one to directly update
     /// the internal storage. Returns `None`
     /// if there are no open slots.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
@@ -258,7 +261,7 @@ where
     ///
     /// Returns `None` if `key` is out of range
     /// or the slot is marked as unoccupied. Key
-    /// look up is logarithmic in the number of
+    /// checks are logarithmic in the number of
     /// open slots.
     pub fn get(&self, key: usize) -> Option<&[T]> {
         if self.open_slots.contains(&key) {
@@ -270,7 +273,7 @@ where
     ///
     /// Returns `None` if `key` is out of range
     /// or the slot is marked as unoccupied. Key
-    /// look up is logarithmic in the number of
+    /// checks are logarithmic in the number of
     /// open slots.
     pub fn get_mut(&mut self, key: usize) -> Option<&mut [T]> {
         if self.open_slots.contains(&key) {
@@ -280,8 +283,7 @@ where
     }
     /// Iterate over key, slice pairs.
     ///
-    /// This will be slow if the slab is very sparse.
-    ///
+    /// This will be slow if there are a large number of open slots.
     /// # Example
     /// ```
     /// use sliced::SlicedSlab;
@@ -304,9 +306,6 @@ where
 /// This will return whatever it finds at index
 /// regardless of whether it is occupied
 /// or released.
-///
-/// Panics if `index` is out of range.
-///
 /// # Example
 /// ```
 /// use sliced::SlicedSlab;
@@ -316,6 +315,8 @@ where
 /// assert_eq!(ss.insert(&[3, 2, 1]), 1);
 /// assert_eq!(ss[1], [3, 2, 1]);
 /// ```
+/// # Panics 
+/// If `index` is out of range.
 impl<T> Index<usize> for SlicedSlab<T>
 where
     T: Copy + Clone,
@@ -331,8 +332,6 @@ where
 /// This will return whatever it finds at index
 /// regardless of whether it is occupied
 /// or released.
-///
-/// Panics if `index` is out of range.
 /// # Example
 /// ```
 /// use sliced::SlicedSlab;
@@ -341,6 +340,8 @@ where
 /// ss[1][1] = 0;
 /// assert_eq!(ss[1], [4, 0, 6]);
 /// ```
+/// # Panics
+/// If `index` is out of range.
 impl<T> IndexMut<usize> for SlicedSlab<T>
 where
     T: Copy + Clone,

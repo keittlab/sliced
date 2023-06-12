@@ -6,8 +6,8 @@ large collection of relatively short runs of numbers with the run lengths determ
 than during compilation. Using `Vec<Vec<T>>` means that each insert and remove will allocate and deallocate heap
 storage for the inner `Vec`, whereas sliced storage will use a single growable buffer.
 
-For variable length slices, `VarSlicedVec` stores the sequences in a single `Vec` along with their extents, similar
-to a compressed sparse row graph layout.
+For variable length slices, `VarSlicedVec` stores the sequences in a single `Vec` along with their extents using
+a compressed sparse layout.
 ```rust
 use sliced::*;
 let mut vv = VarSlicedVec::new();

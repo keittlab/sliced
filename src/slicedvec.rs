@@ -19,8 +19,6 @@ where
 {
     /// Initialize a `SlicedVec` and set the segment size.
     ///
-    /// Panics if `segment_len` is zero.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedVec;
@@ -29,6 +27,8 @@ where
     /// assert_eq!(sv.segment_len(), 10);
     /// assert_eq!(sv.len(), 1);
     /// ```
+    /// # Panics
+    /// If `segment_len` is zero.
     pub fn new(segment_len: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -38,8 +38,6 @@ where
     }
     /// Initialize a `SlicedVec` and set the capacity and segment size.
     ///
-    /// Panics if `segment_len` is zero.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedVec;
@@ -48,6 +46,8 @@ where
     /// assert_eq!(sv.storage_capacity(), 10000);
     /// assert_eq!(sv.capacity(), 1000);
     /// ```
+    /// # Panics
+    /// If `segment_len` is zero.
     pub fn with_capacity(segment_len: usize, size: usize) -> Self {
         assert_ne!(segment_len, 0);
         Self {
@@ -57,15 +57,15 @@ where
     }
     /// Initialize a `SlicedVec` from a vector.
     ///
-    /// Panics if `segment_len` is zero or the length of `data`
-    /// is not a multiple of `segment_len`.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedVec;
     /// let sv = SlicedVec::from_vec(3, (1..=9).collect());
     /// assert_eq!(sv[0], [1, 2, 3]);
     /// ```
+    /// # Panics
+    /// If `segment_len` is zero or the length of `data`
+    /// is not a multiple of `segment_len`.
     pub fn from_vec(segment_len: usize, data: Vec<T>) -> Self {
         assert_ne!(segment_len, 0);
         assert_eq!(data.len() % segment_len, 0);
@@ -126,8 +126,8 @@ where
     /// assert_eq!(a.len(), 4);
     /// assert_eq!(b.len(), 0);
     /// ```
-    ///
-    ///  Panics if the segment size of `other` is different.
+    ///  # Panics
+    /// If the segment size of `other` is different.
     pub fn append(&mut self, other: &mut Self) {
         assert_eq!(other.segment_len, self.segment_len);
         self.storage.append(&mut other.storage)
@@ -135,11 +135,6 @@ where
     /// Insert a slice at position `index`.
     ///
     /// Complexity is linear in `storage_len`.
-    ///
-    /// Panics if `index` is out of bounds or if the
-    /// length of `segment` is not the native segment
-    /// size of the `SlicedVec`.
-    ///
     /// # Example
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
@@ -150,6 +145,10 @@ where
     /// assert_eq!(sv.len(), 3);
     /// assert_eq!(sv[0], [5, 6]);
     /// ```
+    /// # Panics
+    /// If `index` is out of bounds or if the
+    /// length of `segment` is not the native segment
+    /// size of the `SlicedVec`.
     pub fn insert(&mut self, index: usize, segment: &[T]) {
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
@@ -166,10 +165,6 @@ where
     /// Add one or more segments to the end.
     ///
     /// Complexity is amortized the segment size.
-    ///
-    /// Panics if the length of the slice is not
-    /// a multiple of the segment length.
-    ///
     /// # Example
     ///
     /// ```
@@ -179,7 +174,9 @@ where
     /// assert_eq!(a.len(), 3);
     /// assert_eq!(a.storage_len(), 9);
     /// ```
-    ///
+    /// # Panics
+    /// If the length of the slice is not
+    /// a multiple of the segment length.
     pub fn push(&mut self, segment: &[T]) {
         assert!(self.is_valid_length(segment));
         self.storage.extend_from_slice(segment)
@@ -188,8 +185,8 @@ where
     ///
     /// Complexity is amortized the length of
     /// the slice.
-    ///
-    /// Panics if the length of the slice is not
+    /// # Panics
+    /// If the length of the slice is not
     /// a multiple of the segment length.
     pub fn push_vec(&mut self, segment: Vec<T>) {
         self.push(segment.as_slice())
@@ -259,9 +256,6 @@ where
     ///
     /// Does not preserve the order of segments.
     /// Complexity is the segment length.
-    ///
-    /// Panics if index is out of range.
-    ///
     /// # Example
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
@@ -270,6 +264,8 @@ where
     /// assert_eq!(first, vec![1, 2, 3]);
     /// assert_eq!(sv[0], [7, 8, 9]);
     /// ```
+    ///  # Panics
+    /// If index is out of range.
     pub fn swap_remove(&mut self, index: usize) -> Vec<T> {
         assert!(index < self.len());
         if index != self.last_index() {
@@ -301,9 +297,6 @@ where
     /// Does not preserve the order of segments. The
     /// `SlicedVec` length will be reduced by one segment.
     /// Complexity is the segment length.
-    ///
-    /// Panics if `index` is out of bounds.
-    ///
     /// # Example
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
@@ -312,6 +305,8 @@ where
     /// assert_eq!(sv[1], [7, 8, 9]);
     /// assert_eq!(sv.len(), 2);
     /// ```
+    /// # Panics
+    /// If `index` is out of bounds.
     pub fn overwrite_remove(&mut self, index: usize) {
         assert!(index < self.len());
         if index != self.last_index() {
@@ -346,9 +341,6 @@ where
     /// Appends the contents of the segment at `index`
     /// to the end of the storage and then overwrites
     /// the segment with the new values.
-    ///
-    /// Panics if `index` is out of range.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedVec;
@@ -356,6 +348,8 @@ where
     /// sv.relocate_insert(0, &[1, 2, 3]);
     /// assert_eq!(sv.first(), sv.last());
     /// ```
+    /// # Panics
+    /// If `index` is out of range.
     pub fn relocate_insert(&mut self, index: usize, segment: &[T]) {
         assert!(index < self.len());
         assert_eq!(segment.len(), self.segment_len);
@@ -492,7 +486,8 @@ where
 /// assert_eq!(x.len(), 2);
 /// ```
 ///
-/// Panics if array lengths do not match.
+/// # Panics
+/// If array lengths do not match.
 #[macro_export]
 macro_rules! slicedvec {
     ( $first:expr$(, $the_rest:expr )*$(,)? ) => {

@@ -106,9 +106,6 @@ where
     ///
     /// Complexity is amortized the length of
     /// the slice.
-    ///
-    /// Panics if the length of the slice is not
-    /// a multiple of the segment length.
     /// # Example
     ///
     /// ```
@@ -521,8 +518,6 @@ where T: Copy + Clone
 /// y.push(&[1, 2]);
 /// assert_eq!(y.len(), 1);
 /// ```
-///
-/// Panics if array lengths do not match.
 #[macro_export]
 macro_rules! varslicedvec {
     () => { VarSlicedVec::new() };
