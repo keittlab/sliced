@@ -74,7 +74,7 @@ where
             segment_len,
         }
     }
-    /// Get the internal segment length
+    /// Get the internal segment length.
     ///
     /// # Example
     /// ```
@@ -85,7 +85,8 @@ where
     pub fn segment_len(&self) -> usize {
         self.segment_len
     }
-    /// Returns the number of internal segments
+    /// Returns the number of internal segments.
+    /// 
     /// # Example
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
@@ -95,15 +96,15 @@ where
     pub fn len(&self) -> usize {
         self.storage.len() / self.segment_len
     }
-    /// Get the capacity in number of segments
+    /// Get the capacity in number of segments.
     pub fn capacity(&self) -> usize {
         self.storage_capacity() / self.segment_len
     }
-    /// Returns the length of the underlying storage
+    /// Returns the length of the underlying storage.
     pub fn storage_len(&self) -> usize {
         self.storage.len()
     }
-    /// Get the capacity of the underlying storage
+    /// Get the capacity of the underlying storage.
     pub fn storage_capacity(&self) -> usize {
         self.storage.capacity()
     }
@@ -139,9 +140,7 @@ where
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
     /// let mut sv = slicedvec![[1, 2],[3, 4]];
-    /// // [1,2][3,4]
-    /// sv.insert(0, &[5, 6]);
-    /// // [5,6][1,2][3,4]
+    /// sv.insert(0, &[5, 6]); // [5,6][1,2][3,4]
     /// assert_eq!(sv.len(), 3);
     /// assert_eq!(sv[0], [5, 6]);
     /// ```
@@ -320,7 +319,6 @@ where
     ///
     /// If `len` is greater than the number of
     /// segments, nothing happens.
-    ///
     /// # Example
     /// ```
     /// use sliced::SlicedVec;
@@ -360,7 +358,6 @@ where
     /// Return a chunked iterator.
     ///
     /// Allows iteration over segments as slices.
-    ///
     /// # Example
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
@@ -375,7 +372,6 @@ where
     /// Return a mutable chunked iterator.
     ///
     /// Allows iteration and modification of segments.
-    ///
     /// # Example
     /// ```
     /// use sliced::{slicedvec, SlicedVec};
@@ -476,7 +472,6 @@ where
 /// Construct a `SlicedVec` from a list of arrays
 ///
 /// # Example
-///
 /// ```
 /// use sliced::{slicedvec, SlicedVec};
 /// let x = slicedvec![[1, 2, 3], [4, 5, 6]];
@@ -485,7 +480,6 @@ where
 /// assert_eq!(x[1], [4, 5, 6]);
 /// assert_eq!(x.len(), 2);
 /// ```
-///
 /// # Panics
 /// If array lengths do not match.
 #[macro_export]

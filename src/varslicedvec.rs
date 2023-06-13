@@ -193,7 +193,7 @@ where
         self.append(&mut back);
         debug_assert!(self.check_invariants());
     }
-    /// Remove and return a segment
+    /// Remove and return a segment.
     ///
     /// # Example
     /// ```
@@ -337,7 +337,7 @@ where
         self.storage.capacity()
     }
     /// Shrink the storage to fit data
-    pub fn shring_to_fit(&mut self) {
+    pub fn shrink_to_fit(&mut self) {
         self.storage.shrink_to_fit()
     }
     /// Get storage range of index
